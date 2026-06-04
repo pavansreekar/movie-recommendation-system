@@ -313,6 +313,9 @@ export default function RecommendPage() {
   const [fbLangDisplayed, setFbLangDisplayed] = useState([]);
   const [fbLangReserve,   setFbLangReserve]   = useState([]);
 
+  // "Show me more" — tracks whether user has clicked the button yet
+  const [showMoreClicked, setShowMoreClicked] = useState(false);
+
   // Build step option arrays once data loads (recomputes when showAllLanguages changes)
   const stepOptions = useMemo(() => {
     if (!data) return [];
@@ -399,6 +402,7 @@ export default function RecommendPage() {
     const all = payload.recommendations || [];
     setDisplayedRecs(all.slice(0, DISPLAY_COUNT));
     setReserveRecs(all.slice(DISPLAY_COUNT));
+    setShowMoreClicked(false); // reset on every fresh payload
 
     const splitFallback = (arr) => [arr.slice(0, FALLBACK_DISPLAY), arr.slice(FALLBACK_DISPLAY)];
     const [p0, p1] = splitFallback(payload.fallback_other_platforms || []);
@@ -513,6 +517,16 @@ export default function RecommendPage() {
     finally { setWatchlistingKeys((p) => { const n = new Set(p); n.delete(key); return n; }); }
   }
 
+  function handleShowMore() {
+    // Reveal up to 8 additional titles from reserve, then expose the fallback sections
+    setDisplayedRecs((prev) => {
+      const extras = reserveRecs.slice(0, 8);
+      setReserveRecs(reserveRecs.slice(8));
+      return [...prev, ...extras];
+    });
+    setShowMoreClicked(true);
+  }
+
   const sharedGridProps = { watchingKeys, exitingKeys, watchlistingKeys, watchlistedKeys, onWatch: toggleWatch, onWatchlist: toggleWatchlist };
 
   if (session.loading || (session.authenticated && loading)) return <div className="loading-screen">Loading...</div>;
@@ -532,15 +546,23 @@ export default function RecommendPage() {
     );
   }
 
-  const hasMainRecs   = displayedRecs.length > 0;
-  const filtersActive = data.filters?.active;
-  const totalMainRecs = (data.recommendations || []).length;
-  const showFallbacks = filtersActive && totalMainRecs < DISPLAY_COUNT && !recommending;
+  const hasMainRecs      = displayedRecs.length > 0;
+  const filtersActive    = data.filters?.active;
+  const totalMainRecs    = (data.recommendations || []).length;
+  // "enough" = 16+ results → show button, hide fallbacks until clicked
+  // "not enough" = <16 → show fallbacks immediately (existing behaviour)
+  const enoughForShowMore = totalMainRecs >= DISPLAY_COUNT;
   // Use live state (not raw data) so remove+promote works immediately
   const fbPlatforms   = fbPlatDisplayed;
   const fbGenres      = fbGenDisplayed;
   const fbLanguages   = fbLangDisplayed;
   const hasFallbacks  = fbPlatforms.length > 0 || fbGenres.length > 0 || fbLanguages.length > 0;
+  // Fallbacks visible: either not enough results (auto-show), or user clicked "Show me more"
+  const showFallbacks = !recommending && hasFallbacks && (
+    (!enoughForShowMore && filtersActive) || showMoreClicked
+  );
+  // Button visible: wizard done, main recs exist, enough total results, not yet clicked
+  const showShowMoreBtn = wizardDone && hasMainRecs && !recommending && enoughForShowMore && !showMoreClicked;
 
   // Summary labels for compact view
   const summaryTags = STEP_META.map((m) => {
@@ -655,15 +677,57 @@ export default function RecommendPage() {
 
               {hasMainRecs ? <RecPosterGrid recs={displayedRecs} {...sharedGridProps} /> : null}
 
-              {/* ── 3-tier fallbacks when main results < DISPLAY_COUNT ── */}
-              {showFallbacks && hasFallbacks && (
+              {/* ── "Show me more" button — only when enough results exist ── */}
+              {showShowMoreBtn && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: "1.5rem" }}>
+                  <button
+                    type="button"
+                    onClick={handleShowMore}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.75rem 2rem",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "var(--text)",
+                      fontSize: "0.9rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      letterSpacing: "-0.01em",
+                      transition: "background 0.18s, border-color 0.18s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M8 3v10M3 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Show me more
+                  </button>
+                </div>
+              )}
+
+              {/* ── 3-tier fallbacks ── */}
+              {showFallbacks && (
                 <div className="fallback-congrats">
                   <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M10 2l1.8 5.4H18l-5 3.6 1.9 5.8L10 13.3l-4.9 3.5 1.9-5.8-5-3.6h6.2L10 2Z"
                       stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
                   </svg>
                   <div>
-                    <strong>Congrats — you&apos;ve watched most titles matching your filters!</strong>
+                    <strong>
+                      {enoughForShowMore
+                        ? "Want to explore further?"
+                        : "Congrats — you’ve watched most titles matching your filters!"}
+                    </strong>
                     <span> Here are a few more suggestions with slightly relaxed options.</span>
                   </div>
                 </div>

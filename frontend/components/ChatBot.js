@@ -161,7 +161,7 @@ export default function ChatBot() {
         aria-label={open ? "Close chat" : "Open chat assistant"}
       >
         {open ? <CloseIcon /> : <ChatIcon />}
-        {!open && <span className="chatbot-fab-label">Chat Here</span>}
+        {!open && <span className="chatbot-fab-label">Chat (beta)</span>}
       </button>
 
       {/* Chat panel */}
@@ -172,8 +172,8 @@ export default function ChatBot() {
             <div className="chatbot-header-left">
               <span className="chatbot-header-icon"><SparkleIcon /></span>
               <div>
-                <div className="chatbot-header-title">Movie Assistant</div>
-                <div className="chatbot-header-sub">Powered by Claude</div>
+                <div className="chatbot-header-title">NextPick Assistant</div>
+                <div className="chatbot-header-sub">Beta version</div>
               </div>
             </div>
             <div className="chatbot-header-actions">

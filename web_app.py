@@ -311,14 +311,16 @@ def get_dashboard_view(user_id: int) -> dict[str, Any]:
         except RuntimeError as error:
             recommendations_error = f"TMDB discovery failed: {error}"
 
-    # ── 3-tier smart fallbacks (triggered when main results < 16) ────────────
-    FALLBACK_THRESHOLD = 16
+    # ── 3-tier smart fallbacks (always computed when filters are active) ────────
+    # Previously gated behind len(recommendations) < 16, but now always built so
+    # the frontend can reveal them on-demand via the "Show me more" button even
+    # when there are plenty of primary results.
     FALLBACK_SIZE = 16  # fetch 16 so frontend can show 8 + keep 8 in reserve
     fallback_other_platforms: list[Recommendation] = []
     fallback_other_genres: list[Recommendation] = []
     fallback_other_languages: list[Recommendation] = []
 
-    if filters.get("active") and len(recommendations) < FALLBACK_THRESHOLD:
+    if filters.get("active"):
         excluded_keys: set[tuple[str, int]] = (
             {(m.content_type, m.tmdb_id) for m in watched_from_db}
             | {(r.movie.content_type, r.movie.tmdb_id) for r in recommendations}

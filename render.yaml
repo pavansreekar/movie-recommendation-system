@@ -1,0 +1,24 @@
+# Render Blueprint — deploys the Flask backend as a web service.
+# Frontend is deployed separately on Vercel (see README).
+#
+# Usage: connect your GitHub repo on https://dashboard.render.com → New → Blueprint
+services:
+  - type: web
+    name: nextpick-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120
+    plan: free
+    envVars:
+      - key: TMDB_API_KEY
+        sync: false           # fill in Render dashboard — never commit secrets
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FLASK_SECRET_KEY
+        generateValue: true   # Render auto-generates a strong random value
+      - key: FRONTEND_ORIGINS
+        sync: false           # set to your Vercel URL after frontend is deployed
+      - key: TMDB_TIMEOUT_SECONDS
+        value: "8"
+      - key: TMDB_MAX_RETRIES
+        value: "3"
