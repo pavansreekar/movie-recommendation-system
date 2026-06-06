@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest } from "../lib/api";
 import ChatBot from "./ChatBot";
 
 const navItems = [
-  { href: "/dashboard", label: "Home" },
-  { href: "/recommend", label: "Recommend" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/history", label: "History" },
+  { href: "/dashboard",  label: "Home",      icon: HomeIcon },
+  { href: "/recommend",  label: "Recommend",  icon: StarIcon },
+  { href: "/watchlist",  label: "Watchlist",  icon: BookmarkIcon },
+  { href: "/history",    label: "History",    icon: ClockIcon },
 ];
 
+/* ── Icons ────────────────────────────────────────────────────────────────── */
 function SearchIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -21,7 +22,14 @@ function SearchIcon() {
     </svg>
   );
 }
-
+function SearchIconLg() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M16.5 16.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 function CloseSearchIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -29,7 +37,6 @@ function CloseSearchIcon() {
     </svg>
   );
 }
-
 function ChevronDown() {
   return (
     <svg width="11" height="11" viewBox="0 0 12 8" fill="none" aria-hidden="true">
@@ -37,20 +44,53 @@ function ChevronDown() {
     </svg>
   );
 }
-
 function SunIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
-
 function MoonIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
+        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function HomeIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5Z"
+        stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function StarIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2Z"
+        stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+function BookmarkIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 3h14a1 1 0 0 1 1 1v17l-8-4.7L4 21V4a1 1 0 0 1 1-1Z"
+        stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function ClockIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 7v5.2l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -60,7 +100,7 @@ function getInitials(username) {
   return username.slice(0, 1).toUpperCase();
 }
 
-// ── Netflix-style search grid ─────────────────────────────────────────────────
+/* ── Desktop search grid overlay ─────────────────────────────────────────── */
 function SearchGrid({ results, query, onSelect, onClose }) {
   if (!results.length) {
     return (
@@ -82,13 +122,10 @@ function SearchGrid({ results, query, onSelect, onClose }) {
             onClick={() => onSelect(item)}
             type="button"
           >
-            {item.poster_url ? (
-              <img src={item.poster_url} alt={item.title} className="sg-poster" />
-            ) : (
-              <div className="sg-poster sg-poster-fallback">
-                <span>{item.title?.[0]}</span>
-              </div>
-            )}
+            {item.poster_url
+              ? <img src={item.poster_url} alt={item.title} className="sg-poster" />
+              : <div className="sg-poster sg-poster-fallback"><span>{item.title?.[0]}</span></div>
+            }
             <div className="sg-card-overlay">
               <span className="sg-card-title">{item.title}</span>
               <span className="sg-card-meta">
@@ -103,23 +140,108 @@ function SearchGrid({ results, query, onSelect, onClose }) {
   );
 }
 
+/* ── Mobile search overlay ────────────────────────────────────────────────── */
+function MobileSearch({ onClose, onSelect }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = query.trim();
+    if (!q) { setResults([]); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const data = await apiRequest(`/api/search/live?query=${encodeURIComponent(q)}`);
+        setResults(data.results || []);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 220);
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, [onClose]);
+
+  return (
+    <div className="mobile-search-overlay">
+      <div className="mobile-search-bar-row">
+        <div className="mobile-search-input-wrap">
+          <span className="nav-search-icon"><SearchIcon /></span>
+          <input
+            ref={inputRef}
+            type="text"
+            className="mobile-search-input"
+            placeholder="Titles, people, genres…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoComplete="off"
+          />
+          {loading && <span className="nav-search-spinner" />}
+          {query && !loading && (
+            <button className="nav-search-clear" onClick={() => setQuery("")} type="button" aria-label="Clear">
+              <CloseSearchIcon />
+            </button>
+          )}
+        </div>
+        <button className="mobile-search-cancel" onClick={onClose} type="button">Cancel</button>
+      </div>
+
+      {query.trim() && results.length === 0 && !loading && (
+        <div className="mobile-search-empty">No results for <strong>"{query}"</strong></div>
+      )}
+
+      {results.length > 0 && (
+        <div className="mobile-search-results">
+          {results.map((item) => (
+            <button
+              key={`${item.content_type}-${item.tmdb_id}`}
+              className="mobile-search-item"
+              onClick={() => { onClose(); onSelect(item); }}
+              type="button"
+            >
+              {item.poster_url
+                ? <img src={item.poster_url} alt={item.title} className="mobile-search-poster" />
+                : <div className="mobile-search-poster mobile-search-poster-fallback">{item.title?.[0]}</div>
+              }
+              <div className="mobile-search-info">
+                <span className="mobile-search-title">{item.title}</span>
+                <span className="mobile-search-meta">
+                  {item.content_label}{item.year ? ` · ${item.year}` : ""}
+                  {item.rating ? ` · ★ ${item.rating.toFixed(1)}` : ""}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── AppShell ─────────────────────────────────────────────────────────────── */
 export default function AppShell({ user, children }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
 
-  // ── Search state ──────────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery,   setSearchQuery]   = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchActive, setSearchActive] = useState(false);
+  const [searchActive,  setSearchActive]  = useState(false);
   const debounceRef = useRef(null);
-  const inputRef = useRef(null);
+  const inputRef    = useRef(null);
 
-  // ── User dropdown ─────────────────────────────────────────────────────────
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
-
-  // ── Theme ─────────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
@@ -135,68 +257,43 @@ export default function AppShell({ user, children }) {
     document.documentElement.setAttribute("data-theme", next);
   }
 
-  // ── Live search: debounce + fetch ─────────────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults([]);
-      setSearchActive(false);
-      return;
-    }
+    if (!q) { setSearchResults([]); setSearchActive(false); return; }
     setSearchActive(true);
     setSearchLoading(true);
-    debounceRef.current = setTimeout(async () => { // 220ms debounce
+    debounceRef.current = setTimeout(async () => {
       try {
         const data = await apiRequest(`/api/search/live?query=${encodeURIComponent(q)}`);
         setSearchResults(data.results || []);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
-      }
+      } catch { setSearchResults([]); }
+      finally { setSearchLoading(false); }
     }, 220);
     return () => clearTimeout(debounceRef.current);
   }, [searchQuery]);
 
-  // Close search on route change
   useEffect(() => {
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchActive(false);
+    setSearchQuery(""); setSearchResults([]); setSearchActive(false);
+    setMobileSearchOpen(false);
   }, [pathname]);
 
-  // ESC closes search
   useEffect(() => {
-    function onKey(e) {
-      if (e.key === "Escape") clearSearch();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    const fn = (e) => { if (e.key === "Escape") clearSearch(); };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
   }, []);
 
-  // Close user dropdown on outside click
   useEffect(() => {
-    function onMouseDown(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
+    const fn = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  function clearSearch() {
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchActive(false);
-  }
-
-  function handleSelect(item) {
-    clearSearch();
-    router.push(`/title/${item.content_type}/${item.tmdb_id}`);
-  }
-
+  function clearSearch() { setSearchQuery(""); setSearchResults([]); setSearchActive(false); }
+  function handleSelect(item) { clearSearch(); router.push(`/title/${item.content_type}/${item.tmdb_id}`); }
   async function handleLogout() {
     await apiRequest("/api/auth/logout", { method: "POST" });
     router.replace("/");
@@ -206,9 +303,9 @@ export default function AppShell({ user, children }) {
 
   return (
     <div className="app-shell">
+      {/* ── Top nav ── */}
       <nav className="top-nav">
         <div className="top-nav-inner">
-          {/* Brand */}
           <Link href="/dashboard" className="nav-brand" aria-label="NextPick home">
             <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" style={{ flexShrink: 0 }}>
               <defs>
@@ -227,22 +324,18 @@ export default function AppShell({ user, children }) {
             <span className="eyebrow">NextPick</span>
           </Link>
 
-          {/* Nav links */}
+          {/* Desktop nav links */}
           <div className="top-nav-links">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`top-nav-link${pathname === item.href ? " active" : ""}`}
-              >
-                {item.label}
+            {navItems.map(({ href, label }) => (
+              <Link key={href} href={href}
+                className={`top-nav-link${pathname === href ? " active" : ""}`}>
+                {label}
               </Link>
             ))}
           </div>
 
-          {/* Right: search + user */}
           <div className="nav-right">
-            {/* Netflix-style search bar */}
+            {/* Desktop search bar */}
             <div className={`nav-search-bar${searchActive ? " nav-search-active" : ""}`}>
               <span className="nav-search-icon"><SearchIcon /></span>
               <input
@@ -255,12 +348,22 @@ export default function AppShell({ user, children }) {
                 autoComplete="off"
               />
               {searchActive && (
-                <button className="nav-search-clear" onClick={clearSearch} aria-label="Clear search" type="button">
+                <button className="nav-search-clear" onClick={clearSearch} aria-label="Clear" type="button">
                   <CloseSearchIcon />
                 </button>
               )}
               {searchLoading && <span className="nav-search-spinner" />}
             </div>
+
+            {/* Mobile search trigger — only visible on mobile via CSS */}
+            <button
+              className="mobile-search-trigger"
+              onClick={() => setMobileSearchOpen(true)}
+              aria-label="Search"
+              type="button"
+            >
+              <SearchIconLg />
+            </button>
 
             {/* User dropdown */}
             <div className="nav-user" ref={dropdownRef}>
@@ -304,13 +407,41 @@ export default function AppShell({ user, children }) {
 
       <main className="main-shell">{children}</main>
 
-      {/* Netflix-style live search overlay */}
+      {/* ── Mobile bottom navigation ── */}
+      <nav className="bottom-nav" aria-label="Mobile navigation">
+        {navItems.map(({ href, label, icon: Icon }) => (
+          <Link key={href} href={href}
+            className={`bottom-nav-item${pathname === href ? " active" : ""}`}>
+            <span className="bottom-nav-icon"><Icon size={22} /></span>
+            <span className="bottom-nav-label">{label}</span>
+          </Link>
+        ))}
+        <button
+          className={`bottom-nav-item${mobileSearchOpen ? " active" : ""}`}
+          onClick={() => setMobileSearchOpen(true)}
+          type="button"
+          aria-label="Search"
+        >
+          <span className="bottom-nav-icon"><SearchIconLg /></span>
+          <span className="bottom-nav-label">Search</span>
+        </button>
+      </nav>
+
+      {/* Desktop search overlay */}
       {searchActive && (
         <SearchGrid
           results={searchResults}
           query={searchQuery.trim()}
           onSelect={handleSelect}
           onClose={clearSearch}
+        />
+      )}
+
+      {/* Mobile search overlay */}
+      {mobileSearchOpen && (
+        <MobileSearch
+          onClose={() => setMobileSearchOpen(false)}
+          onSelect={handleSelect}
         />
       )}
 
