@@ -16,6 +16,8 @@ services:
         sync: false
       - key: FLASK_SECRET_KEY
         generateValue: true   # Render auto-generates a strong random value
+      - key: DATABASE_URL
+        sync: false           # PostgreSQL connection string — get a free DB at neon.tech
       - key: FRONTEND_ORIGINS
         sync: false           # set to your Vercel URL after frontend is deployed
       - key: TMDB_TIMEOUT_SECONDS

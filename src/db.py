@@ -1,39 +1,114 @@
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from .auth import hash_password, verify_password
 from .recommender import Movie
 
 
+# ---------------------------------------------------------------------------
+# PostgreSQL compatibility shim
+# ---------------------------------------------------------------------------
+
+class _PGConn:
+    """
+    Wraps a psycopg2 connection to expose the same
+    ``execute() → fetchone() / fetchall()`` interface that sqlite3 uses,
+    so the rest of Database needs zero branching.
+    """
+
+    def __init__(self, raw_conn) -> None:
+        import psycopg2.extras
+        self._raw = raw_conn
+        self._cur = raw_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def execute(self, sql: str, params: tuple = ()) -> "_PGConn":
+        # psycopg2 uses %s placeholders; sqlite3 uses ?
+        self._cur.execute(sql.replace("?", "%s"), params)
+        return self
+
+    def fetchone(self) -> dict | None:
+        row = self._cur.fetchone()
+        return dict(row) if row is not None else None
+
+    def fetchall(self) -> list[dict]:
+        return [dict(r) for r in self._cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+
 class Database:
+    """
+    Thin persistence layer.  Uses SQLite when DATABASE_URL is absent (local
+    development) and PostgreSQL when DATABASE_URL is set (production).
+    The public interface is identical in both modes.
+    """
+
     def __init__(self, db_path: str | Path) -> None:
-        self.db_path = str(db_path)
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._pg_url: str | None = os.environ.get("DATABASE_URL")
+        if not self._pg_url:
+            self.db_path = str(db_path)
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    # ── connection helpers ─────────────────────────────────────────────────────
+
+    @contextmanager
+    def _connect(self):
+        """
+        Context manager yielding a connection-like object.
+        Commits on clean exit, rolls back on exception, always closes.
+        """
+        if self._pg_url:
+            import psycopg2
+            raw = psycopg2.connect(self._pg_url)
+            conn = _PGConn(raw)
+            try:
+                yield conn
+                raw.commit()
+            except Exception:
+                raw.rollback()
+                raise
+            finally:
+                raw.close()
+        else:
+            raw = sqlite3.connect(self.db_path)
+            raw.row_factory = sqlite3.Row
+            try:
+                yield raw
+                raw.commit()
+            except Exception:
+                raw.rollback()
+                raise
+            finally:
+                raw.close()
+
+    def _pk(self) -> str:
+        """Auto-increment primary key DDL fragment."""
+        return "SERIAL PRIMARY KEY" if self._pg_url else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    # ── schema ────────────────────────────────────────────────────────────────
 
     def _init_schema(self) -> None:
+        pk = self._pk()
         with self._connect() as conn:
-            conn.execute(
-                """
+            conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     username TEXT NOT NULL UNIQUE,
                     password_hash TEXT NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
-            conn.execute(
-                """
+            """)
+            conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS watched_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     tmdb_id INTEGER NOT NULL,
                     content_type TEXT NOT NULL,
@@ -50,8 +125,7 @@ class Database:
                     UNIQUE(user_id, tmdb_id, content_type),
                     FOREIGN KEY(user_id) REFERENCES users(id)
                 )
-                """
-            )
+            """)
             self._ensure_column(conn, "watched_items", "user_rating", "REAL")
             self._ensure_column(
                 conn,
@@ -59,22 +133,19 @@ class Database:
                 "in_watched_history",
                 "INTEGER NOT NULL DEFAULT 1",
             )
-            conn.execute(
-                """
+            conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS chat_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(user_id) REFERENCES users(id)
                 )
-                """
-            )
-            conn.execute(
-                """
+            """)
+            conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS watchlist_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id {pk},
                     user_id INTEGER NOT NULL,
                     tmdb_id INTEGER NOT NULL,
                     content_type TEXT NOT NULL,
@@ -91,16 +162,30 @@ class Database:
                     UNIQUE(user_id, tmdb_id, content_type),
                     FOREIGN KEY(user_id) REFERENCES users(id)
                 )
-                """
-            )
+            """)
 
     def _ensure_column(
-        self, conn: sqlite3.Connection, table_name: str, column_name: str, column_definition: str
+        self, conn, table_name: str, column_name: str, column_definition: str
     ) -> None:
-        columns = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-        if any(column["name"] == column_name for column in columns):
-            return
-        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+        if self._pg_url:
+            row = conn.execute(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = ? AND column_name = ?
+                """,
+                (table_name, column_name),
+            ).fetchone()
+            if row is not None:
+                return
+        else:
+            cols = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+            if any(c["name"] == column_name for c in cols):
+                return
+        conn.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
+        )
+
+    # ── users ─────────────────────────────────────────────────────────────────
 
     def create_user(self, username: str, password: str) -> tuple[bool, str]:
         clean_username = username.strip()
@@ -116,8 +201,13 @@ class Database:
                     "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                     (clean_username, password_hash),
                 )
-        except sqlite3.IntegrityError:
-            return False, "Username already exists."
+        except Exception as e:
+            # sqlite3 → "UNIQUE constraint failed"
+            # psycopg2 → "duplicate key value violates unique constraint"
+            msg = str(e).lower()
+            if "unique" in msg or "duplicate" in msg:
+                return False, "Username already exists."
+            raise
         return True, "Account created."
 
     def authenticate_user(self, username: str, password: str) -> int | None:
@@ -134,12 +224,14 @@ class Database:
 
     def get_username(self, user_id: int) -> str | None:
         with self._connect() as conn:
-            row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+            row = conn.execute(
+                "SELECT username FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
         return row["username"] if row else None
 
-    def add_watched_item(self, user_id: int, movie: Movie) -> None:
-        import json
+    # ── watched history ───────────────────────────────────────────────────────
 
+    def add_watched_item(self, user_id: int, movie: Movie) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -148,15 +240,15 @@ class Database:
                     language, year, rating, genres_json, mood_tags_json, in_watched_history
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 ON CONFLICT(user_id, tmdb_id, content_type) DO UPDATE SET
-                    title = excluded.title,
-                    overview = excluded.overview,
-                    poster_url = excluded.poster_url,
-                    backdrop_url = excluded.backdrop_url,
-                    language = excluded.language,
-                    year = excluded.year,
-                    rating = excluded.rating,
-                    genres_json = excluded.genres_json,
-                    mood_tags_json = excluded.mood_tags_json,
+                    title = EXCLUDED.title,
+                    overview = EXCLUDED.overview,
+                    poster_url = EXCLUDED.poster_url,
+                    backdrop_url = EXCLUDED.backdrop_url,
+                    language = EXCLUDED.language,
+                    year = EXCLUDED.year,
+                    rating = EXCLUDED.rating,
+                    genres_json = EXCLUDED.genres_json,
+                    mood_tags_json = EXCLUDED.mood_tags_json,
                     in_watched_history = 1
                 """,
                 (
@@ -179,8 +271,7 @@ class Database:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT user_rating
-                FROM watched_items
+                SELECT user_rating FROM watched_items
                 WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                 """,
                 (user_id, tmdb_id, content_type),
@@ -195,16 +286,13 @@ class Database:
             else:
                 conn.execute(
                     """
-                    UPDATE watched_items
-                    SET in_watched_history = 0
+                    UPDATE watched_items SET in_watched_history = 0
                     WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                     """,
                     (user_id, tmdb_id, content_type),
                 )
 
     def list_watched_items(self, user_id: int) -> list[Movie]:
-        import json
-
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -240,14 +328,9 @@ class Database:
             )
         return items
 
-    def set_user_rating(
-        self,
-        user_id: int,
-        movie: Movie,
-        user_rating: float,
-    ) -> None:
-        import json
+    # ── ratings ───────────────────────────────────────────────────────────────
 
+    def set_user_rating(self, user_id: int, movie: Movie, user_rating: float) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -256,16 +339,16 @@ class Database:
                     language, year, rating, genres_json, mood_tags_json, user_rating, in_watched_history
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                 ON CONFLICT(user_id, tmdb_id, content_type) DO UPDATE SET
-                    title = excluded.title,
-                    overview = excluded.overview,
-                    poster_url = excluded.poster_url,
-                    backdrop_url = excluded.backdrop_url,
-                    language = excluded.language,
-                    year = excluded.year,
-                    rating = excluded.rating,
-                    genres_json = excluded.genres_json,
-                    mood_tags_json = excluded.mood_tags_json,
-                    user_rating = excluded.user_rating
+                    title = EXCLUDED.title,
+                    overview = EXCLUDED.overview,
+                    poster_url = EXCLUDED.poster_url,
+                    backdrop_url = EXCLUDED.backdrop_url,
+                    language = EXCLUDED.language,
+                    year = EXCLUDED.year,
+                    rating = EXCLUDED.rating,
+                    genres_json = EXCLUDED.genres_json,
+                    mood_tags_json = EXCLUDED.mood_tags_json,
+                    user_rating = EXCLUDED.user_rating
                 """,
                 (
                     user_id,
@@ -288,8 +371,7 @@ class Database:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT in_watched_history
-                FROM watched_items
+                SELECT in_watched_history FROM watched_items
                 WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                 """,
                 (user_id, tmdb_id, content_type),
@@ -299,8 +381,7 @@ class Database:
             if int(row["in_watched_history"] or 0) == 1:
                 conn.execute(
                     """
-                    UPDATE watched_items
-                    SET user_rating = NULL
+                    UPDATE watched_items SET user_rating = NULL
                     WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                     """,
                     (user_id, tmdb_id, content_type),
@@ -315,8 +396,7 @@ class Database:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT user_rating
-                FROM watched_items
+                SELECT user_rating FROM watched_items
                 WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                 """,
                 (user_id, tmdb_id, content_type),
@@ -329,8 +409,7 @@ class Database:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT in_watched_history
-                FROM watched_items
+                SELECT in_watched_history FROM watched_items
                 WHERE user_id = ? AND tmdb_id = ? AND content_type = ?
                 """,
                 (user_id, tmdb_id, content_type),
@@ -339,9 +418,9 @@ class Database:
             return False
         return bool(int(row["in_watched_history"] or 0))
 
-    def add_watchlist_item(self, user_id: int, movie: Movie) -> None:
-        import json
+    # ── watchlist ─────────────────────────────────────────────────────────────
 
+    def add_watchlist_item(self, user_id: int, movie: Movie) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -382,37 +461,7 @@ class Database:
             ).fetchone()
         return row is not None
 
-    # ── Chat history ──────────────────────────────────────────────────────────
-
-    def save_chat_message(self, user_id: int, role: str, content: str) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)",
-                (user_id, role, content),
-            )
-
-    def get_chat_history(self, user_id: int, limit: int = 20) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT role, content FROM (
-                    SELECT id, role, content FROM chat_messages
-                    WHERE user_id = ?
-                    ORDER BY id DESC
-                    LIMIT ?
-                ) ORDER BY id ASC
-                """,
-                (user_id, limit),
-            ).fetchall()
-        return [{"role": row["role"], "content": row["content"]} for row in rows]
-
-    def clear_chat_history(self, user_id: int) -> None:
-        with self._connect() as conn:
-            conn.execute("DELETE FROM chat_messages WHERE user_id = ?", (user_id,))
-
     def list_watchlist_items(self, user_id: int) -> list[Movie]:
-        import json
-
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -443,3 +492,31 @@ class Database:
                 )
             )
         return items
+
+    # ── chat history ──────────────────────────────────────────────────────────
+
+    def save_chat_message(self, user_id: int, role: str, content: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)",
+                (user_id, role, content),
+            )
+
+    def get_chat_history(self, user_id: int, limit: int = 20) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT role, content FROM (
+                    SELECT id, role, content FROM chat_messages
+                    WHERE user_id = ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                ) sub ORDER BY id ASC
+                """,
+                (user_id, limit),
+            ).fetchall()
+        return [{"role": row["role"], "content": row["content"]} for row in rows]
+
+    def clear_chat_history(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chat_messages WHERE user_id = ?", (user_id,))

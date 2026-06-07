@@ -152,7 +152,18 @@ cd frontend && npm run dev     # frontend only
 
 The recommended setup is **Render** (Flask backend) + **Vercel** (Next.js frontend). Both have free tiers.
 
-### Step 1 — Deploy the Flask backend to Render
+### Step 1 — Create a free PostgreSQL database (Neon)
+
+User data is stored in a database. Render's free tier has an **ephemeral filesystem** — without a real database your data disappears on every redeploy. Neon provides a free persistent PostgreSQL database.
+
+1. Go to [neon.tech](https://neon.tech) and sign up for free.
+2. Click **New Project** → give it a name (e.g. `nextpick`) → **Create Project**.
+3. On the project dashboard, copy the **Connection string** (looks like `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require`).
+4. Keep this string handy — you'll add it to Render in the next step.
+
+---
+
+### Step 2 — Deploy the Flask backend to Render
 
 **Option A — Blueprint (one click)**
 
@@ -163,9 +174,10 @@ The recommended setup is **Render** (Flask backend) + **Vercel** (Next.js fronte
 
    | Variable | Value |
    |---|---|
+   | `DATABASE_URL` | the Neon connection string from Step 1 |
    | `TMDB_API_KEY` | your TMDB v3 key |
    | `ANTHROPIC_API_KEY` | your Anthropic key *(optional)* |
-   | `FRONTEND_ORIGINS` | leave blank for now — add your Vercel URL after step 2 |
+   | `FRONTEND_ORIGINS` | leave blank for now — add your Vercel URL after step 3 |
 
 4. **Deploy**. Copy the service URL, e.g. `https://nextpick-api.onrender.com`.
 
@@ -177,7 +189,7 @@ Start: `gunicorn web_app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120`
 
 ---
 
-### Step 2 — Deploy the Next.js frontend to Vercel
+### Step 3 — Deploy the Next.js frontend to Vercel
 
 1. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your GitHub repo.
 2. Set **Root Directory** to `frontend`.
@@ -191,7 +203,7 @@ Start: `gunicorn web_app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120`
 
 ---
 
-### Step 3 — Wire CORS back to Render
+### Step 4 — Wire CORS back to Render
 
 In the Render dashboard → service → **Environment**, set:
 
@@ -203,15 +215,16 @@ Trigger a redeploy. Your app is live. ✅
 
 ---
 
-### SQLite in production
+### Database
 
-SQLite is fine for personal or low-traffic use. The database lives at `data/app.db` and is created automatically.
+The app auto-selects the right backend:
 
-On Render's free tier the filesystem is **ephemeral** (resets on each deploy). Options:
+| Environment | Backend | How |
+|---|---|---|
+| Local dev | SQLite (`data/app.db`) | `DATABASE_URL` not set |
+| Production | PostgreSQL | `DATABASE_URL` env var set |
 
-- **Render Disk** (paid) — add a persistent disk, mount at `/data`, set env var `DB_PATH=/data/app.db` in `web_app.py`.
-- **PostgreSQL** — swap `src/db.py` to use `psycopg2`; the schema is simple enough to port quickly.
-- **Accept resets** — for a personal demo this is often fine; just re-register after each deploy.
+The free [Neon](https://neon.tech) PostgreSQL tier is more than enough for personal use and survives Render redeployments.
 
 ---
 
