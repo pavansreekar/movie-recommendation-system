@@ -13,6 +13,7 @@ export default function HomePage() {
   const [watchedCount, setWatchedCount] = useState(null);
   const [trending, setTrending] = useState([]);
   const [ottReleases, setOttReleases] = useState([]);
+  const [ottProviders, setOttProviders] = useState([]);
   const [todaysPick, setTodaysPick] = useState(undefined); // undefined = loading, null = none
 
   useEffect(() => {
@@ -24,7 +25,10 @@ export default function HomePage() {
       .then((payload) => setTrending(payload.trending || []))
       .catch(() => {});
     apiRequest("/api/dashboard/ott-releases")
-      .then((payload) => setOttReleases(payload.releases || []))
+      .then((payload) => {
+        setOttReleases(payload.releases || []);
+        setOttProviders(payload.providers || []);
+      })
       .catch(() => {});
     apiRequest("/api/dashboard/today-pick")
       .then((payload) => setTodaysPick(payload.pick || null))
@@ -49,7 +53,7 @@ export default function HomePage() {
           <span className="dashboard-hero-name">{session.user?.username || "there"}</span>.
         </h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", lineHeight: 1.65 }}>
-          Your personal movie &amp; TV recommendation workspace. Everything is saved between sessions.
+          Your personal movie &amp; TV recommendation workspace.
         </p>
         {watchedCount !== null && (
           <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", marginTop: "0.35rem" }}>
@@ -73,7 +77,7 @@ export default function HomePage() {
       ) : todaysPick ? (
         <>
           <section className="section-head">
-            <span className="section-kicker">Today's Spotlight</span>
+            <span className="section-kicker">Spotlight</span>
             <h2>Today's Pick</h2>
           </section>
 
@@ -211,7 +215,11 @@ export default function HomePage() {
         <>
           <section className="section-head">
             <span className="section-kicker">Latest OTT Releases</span>
-            <h2>Recent Arrivals on Netflix, Prime, Hotstar &amp; more</h2>
+            <h2>
+              {ottProviders.length > 0
+                ? `Recent Arrivals on ${ottProviders.slice(0, 3).join(", ")} & more`
+                : "Recent Arrivals on your streaming platforms"}
+            </h2>
           </section>
           <div className="ott-scroll-row">
             {ottReleases.map((item) => (

@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { apiRequest } from "../lib/api";
+import { apiRequest, peekCache } from "../lib/api";
 
 export function useSessionGuard() {
-  const [session, setSession] = useState({ loading: true, authenticated: false, user: null });
+  const [session, setSession] = useState(() => {
+    // A session already fetched moments ago renders immediately instead of flashing a spinner.
+    const known = peekCache("/api/session");
+    return known?.authenticated
+      ? { loading: false, authenticated: true, user: known.user || null }
+      : { loading: true, authenticated: false, user: null };
+  });
   const router = useRouter();
   const pathname = usePathname();
 

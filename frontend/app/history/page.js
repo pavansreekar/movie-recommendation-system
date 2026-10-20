@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
-import { emitWatchHistoryChange } from "../../lib/watchHistorySync";
+import { emitWatchHistoryChange, LIBRARY_EVENT } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
 
 const LANG_LABELS = {
@@ -27,6 +27,7 @@ export default function HistoryPage() {
   const [genreFilter, setGenreFilter] = useState("");
   const [langFilter, setLangFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [ratedOnly, setRatedOnly] = useState(false);
 
   async function loadHistory() {
     const payload = await apiRequest("/api/history");
@@ -34,7 +35,10 @@ export default function HistoryPage() {
   }
 
   useEffect(() => {
-    if (session.authenticated) loadHistory();
+    if (!session.authenticated) return undefined;
+    loadHistory();
+    window.addEventListener(LIBRARY_EVENT, loadHistory);
+    return () => window.removeEventListener(LIBRARY_EVENT, loadHistory);
   }, [session.authenticated]);
 
   async function removeItem(item) {
@@ -66,21 +70,28 @@ export default function HistoryPage() {
     return [...set].sort((a, b) => langLabel(a).localeCompare(langLabel(b)));
   }, [items]);
 
-  const filtersActive = genreFilter || langFilter || typeFilter;
+  const ratedCount = useMemo(
+    () => items.filter((item) => item.user_rating != null).length,
+    [items]
+  );
+
+  const filtersActive = genreFilter || langFilter || typeFilter || ratedOnly;
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
       if (genreFilter && !(item.genres || []).includes(genreFilter)) return false;
       if (langFilter && item.language !== langFilter) return false;
       if (typeFilter && item.content_type !== typeFilter) return false;
+      if (ratedOnly && item.user_rating == null) return false;
       return true;
     });
-  }, [items, genreFilter, langFilter, typeFilter]);
+  }, [items, genreFilter, langFilter, typeFilter, ratedOnly]);
 
   function clearFilters() {
     setGenreFilter("");
     setLangFilter("");
     setTypeFilter("");
+    setRatedOnly(false);
   }
 
   if (session.loading || !session.authenticated) {
@@ -89,11 +100,11 @@ export default function HistoryPage() {
 
   return (
     <AppShell user={session.user}>
-      <section className="hero premium-card compact-hero" style={{ padding: "1.5rem 1.8rem" }}>
+      <section className="hero premium-card compact-hero lib-hero-card">
         <div className="hero-with-filters">
           <div className="hero-text">
             <span className="section-kicker">Library</span>
-            <h1 style={{ margin: "0.55rem 0 0.5rem", fontSize: "2.3rem", lineHeight: 0.98, letterSpacing: "-0.05em" }}>
+            <h1 className="lib-hero-title">
               Things you can&apos;t unsee
             </h1>
             <p style={{ margin: 0 }}>
@@ -137,6 +148,20 @@ export default function HistoryPage() {
                 {langOptions.map((l) => <option key={l} value={l}>{langLabel(l)}</option>)}
               </select>
 
+              <button
+                type="button"
+                className={`rated-toggle-btn${ratedOnly ? " active" : ""}`}
+                onClick={() => setRatedOnly((v) => !v)}
+                disabled={ratedCount === 0}
+                aria-pressed={ratedOnly}
+                title={ratedCount === 0 ? "You haven't rated anything yet" : undefined}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+                Rated{ratedCount > 0 ? ` (${ratedCount})` : ""}
+              </button>
+
               {filtersActive && (
                 <button className="filter-clear-btn" onClick={clearFilters}>
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
@@ -178,6 +203,14 @@ export default function HistoryPage() {
                 >
                   ×
                 </button>
+                {item.user_rating != null && (
+                  <span className="history-rating-badge" title={`You rated this ${item.user_rating}/10`}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    {item.user_rating}
+                  </span>
+                )}
                 <Link
                   href={`/title/${item.content_type}/${item.tmdb_id}`}
                   className="history-poster-link"

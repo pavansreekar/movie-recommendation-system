@@ -12,8 +12,8 @@ services:
     envVars:
       - key: TMDB_API_KEY
         sync: false           # fill in Render dashboard — never commit secrets
-      - key: ANTHROPIC_API_KEY
-        sync: false
+      - key: GROQ_API_KEY
+        sync: false           # optional — enables the chat assistant; free key at console.groq.com
       - key: FLASK_SECRET_KEY
         generateValue: true   # Render auto-generates a strong random value
       - key: DATABASE_URL

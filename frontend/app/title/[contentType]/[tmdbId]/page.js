@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppShell from "../../../../components/AppShell";
@@ -17,10 +17,19 @@ function StarIcon() {
   );
 }
 
-function PlayIcon() {
+function PlayIcon({ size = 16 }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M5 3l14 9-14 9V3z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M6 3.5l14 8.5-14 8.5V3.5z" />
+    </svg>
+  );
+}
+
+function ExternalIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 17L17 7M9 7h8v8" />
     </svg>
   );
 }
@@ -48,6 +57,16 @@ function BackIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ direction = "right" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ transform: direction === "left" ? "rotate(180deg)" : undefined }}>
+      <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }
@@ -137,6 +156,39 @@ export default function TitlePage({ params }) {
   const [similar, setSimilar] = useState([]);
   const { contentType, tmdbId } = use(params);
 
+  // ── Trailer: the YouTube player is only mounted after the user presses play ──
+  const trailerRef = useRef(null);
+  const [trailerPlaying, setTrailerPlaying] = useState(false);
+  useEffect(() => { setTrailerPlaying(false); }, [contentType, tmdbId]);
+
+  function watchTrailer() {
+    setTrailerPlaying(true);
+    trailerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // ── Similar-titles scroll arrows (desktop pointer devices only, via CSS) ──
+  const similarScrollRef = useRef(null);
+  const [similarScrollState, setSimilarScrollState] = useState({ atStart: true, atEnd: true });
+
+  function updateSimilarScrollState() {
+    const el = similarScrollRef.current;
+    if (!el) return;
+    setSimilarScrollState({
+      atStart: el.scrollLeft <= 4,
+      atEnd: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4,
+    });
+  }
+
+  function scrollSimilarBy(direction) {
+    const el = similarScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
+  }
+
+  useEffect(() => {
+    updateSimilarScrollState();
+  }, [similar]);
+
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
@@ -146,13 +198,16 @@ export default function TitlePage({ params }) {
     setLoading(true);
     setError("");
     try {
-      const [payload, simPayload] = await Promise.all([
-        apiRequest(`/api/title/${contentType}/${tmdbId}`),
-        apiRequest(`/api/title/${contentType}/${tmdbId}/similar`).catch(() => ({ similar: [] })),
-      ]);
+      // Start both requests together, but show the page as soon as the main details land;
+      // the (slower) similar-titles row fills in afterwards.
+      const simRequest = apiRequest(`/api/title/${contentType}/${tmdbId}/similar`)
+        .catch(() => ({ similar: [] }));
+      setSimilar([]);
+      const payload = await apiRequest(`/api/title/${contentType}/${tmdbId}`);
       setDetail(payload);
       setRating(payload.saved_rating ?? 0);
-      setSimilar(simPayload.similar || []);
+      setLoading(false);
+      simRequest.then((simPayload) => setSimilar(simPayload.similar || []));
     } catch (err) {
       setDetail(null);
       setError(err.message);
@@ -330,7 +385,12 @@ export default function TitlePage({ params }) {
             {/* Info column */}
             <div className="td-info-col">
               {/* Badge + title */}
-              <span className="eyebrow">{m.content_label}</span>
+              <div className="td-title-badges">
+                <span className="eyebrow">{m.content_label}</span>
+                {detail.certification && (
+                  <span className="td-cert-badge" title="Maturity rating">{detail.certification}</span>
+                )}
+              </div>
               <h1 className="td-title">{m.title}</h1>
 
               {/* Genre chips */}
@@ -340,15 +400,23 @@ export default function TitlePage({ params }) {
                 </div>
               )}
 
+              {/* Trailer call-to-action */}
+              {detail.trailer && (
+                <button type="button" className="td-trailer-cta" onClick={watchTrailer}>
+                  <span className="td-trailer-cta-icon"><PlayIcon size={12} /></span>
+                  Watch Trailer
+                </button>
+              )}
+
               {/* Overview */}
               <p className="td-overview">{m.overview || "No description available."}</p>
 
               {/* Providers */}
               <div className="td-providers-row">
-                <span className="td-providers-label">Available on</span>
+                <span className="td-providers-label">Available in {detail.region_name || detail.region}</span>
                 {detail.providers?.length
                   ? detail.providers.map((p) => <span key={p} className="td-provider-badge">{p}</span>)
-                  : <span className="td-no-provider">No streaming info for {detail.region}</span>
+                  : <span className="td-no-provider">No streaming info for {detail.region_name || detail.region}</span>
                 }
               </div>
 
@@ -413,16 +481,78 @@ export default function TitlePage({ params }) {
           </div>
         </div>
 
+        {/* ── Trailer ── */}
+        {detail.trailer && (
+          <section className="td-trailer premium-card" ref={trailerRef} aria-label="Trailer">
+            <div className="td-trailer-frame">
+              {trailerPlaying ? (
+                <iframe
+                  className="td-trailer-player"
+                  src={`https://www.youtube-nocookie.com/embed/${detail.trailer.key}?autoplay=1&rel=0&modestbranding=1&playsinline=1`}
+                  title={`${m.title} — ${detail.trailer.name}`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="td-trailer-poster"
+                  onClick={() => setTrailerPlaying(true)}
+                  aria-label={`Play trailer for ${m.title}`}
+                >
+                  <img
+                    src={m.backdrop_url || `https://i.ytimg.com/vi/${detail.trailer.key}/hqdefault.jpg`}
+                    alt=""
+                    className="td-trailer-thumb"
+                  />
+                  <span className="td-trailer-shade" />
+                  <span className="td-trailer-play"><PlayIcon size={26} /></span>
+                  <span className="td-trailer-tag">{detail.trailer.type}</span>
+                </button>
+              )}
+            </div>
+
+            <div className="td-trailer-info">
+              <span className="section-kicker">Trailer</span>
+              <h2 className="td-trailer-heading">Watch the trailer</h2>
+              <p className="td-trailer-name">{detail.trailer.name}</p>
+              <p className="td-trailer-note">
+                Get a feel for {m.title} before you commit.
+              </p>
+              <div className="td-trailer-actions">
+                {!trailerPlaying && (
+                  <button type="button" className="button button-primary td-btn-sm" onClick={() => setTrailerPlaying(true)}>
+                    <PlayIcon size={13} /> Play trailer
+                  </button>
+                )}
+                <a
+                  className="td-trailer-link"
+                  href={`https://www.youtube.com/watch?v=${detail.trailer.key}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open on YouTube <ExternalIcon />
+                </a>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* ── Cast + Details cards ── */}
         <div className="td-bottom-grid">
           {/* Cast */}
           <div className="td-bottom-card premium-card">
             <span className="section-kicker">Cast</span>
             <h2 className="td-bottom-heading">Primary Cast</h2>
-            {detail.cast?.length ? (
+            {(detail.cast_full?.length || detail.cast?.length) ? (
               <div className="td-cast-list">
-                {detail.cast.map((name, i) => (
-                  <span key={i} className="td-cast-name">{name}</span>
+                {(detail.cast_full?.length ? detail.cast_full : detail.cast.map(n => ({ name: n, id: null }))).map((c, i) => (
+                  c.id
+                    ? <Link key={i} href={`/person/${c.id}`} className="td-cast-name td-cast-link">
+                        {c.name}
+                      </Link>
+                    : <span key={i} className="td-cast-name">{c.name}</span>
                 ))}
               </div>
             ) : (
@@ -439,6 +569,12 @@ export default function TitlePage({ params }) {
                 <dt>Language</dt>
                 <dd>{langName}</dd>
               </div>
+              {detail.certification && (
+                <div className="td-detail-row">
+                  <dt>Certification</dt>
+                  <dd>{detail.certification}</dd>
+                </div>
+              )}
               <div className="td-detail-row">
                 <dt>TMDB Rating</dt>
                 <dd>★ {detail.original_rating?.toFixed(1)} / 10</dd>
@@ -469,10 +605,32 @@ export default function TitlePage({ params }) {
         {similar.length > 0 && (
           <div className="td-similar-section">
             <div className="td-similar-header">
-              <span className="section-kicker">You might also like</span>
-              <h2 className="td-similar-heading">Similar to {m.title}</h2>
+              <div className="td-similar-header-text">
+                <span className="section-kicker">You might also like</span>
+                <h2 className="td-similar-heading">Similar to {m.title}</h2>
+              </div>
+              <div className="td-similar-nav">
+                <button
+                  type="button"
+                  className="td-similar-nav-btn"
+                  onClick={() => scrollSimilarBy(-1)}
+                  disabled={similarScrollState.atStart}
+                  aria-label="Scroll left"
+                >
+                  <ChevronIcon direction="left" />
+                </button>
+                <button
+                  type="button"
+                  className="td-similar-nav-btn"
+                  onClick={() => scrollSimilarBy(1)}
+                  disabled={similarScrollState.atEnd}
+                  aria-label="Scroll right"
+                >
+                  <ChevronIcon direction="right" />
+                </button>
+              </div>
             </div>
-            <div className="td-similar-scroll">
+            <div className="td-similar-scroll" ref={similarScrollRef} onScroll={updateSimilarScrollState}>
               {similar.map((item) => {
                 const statusClass = item.is_watched
                   ? "td-similar-card--watched"

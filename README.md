@@ -1,6 +1,6 @@
 # NextPick 🎬
 
-A personalised movie & TV recommendation app built with Flask + Next.js, powered by the [TMDB API](https://developer.themoviedb.org/) and an optional Claude AI chat assistant.
+A personalised movie & TV recommendation app built with Flask + Next.js, powered by the [TMDB API](https://developer.themoviedb.org/) and an optional AI chat assistant (Groq).
 
 > **Live demo** · *replace with your URL after deploying*
 
@@ -31,10 +31,14 @@ A personalised movie & TV recommendation app built with Flask + Next.js, powered
   2. Same genres, any language
   3. TMDB similar/recommendations filtered by genre overlap
 
-### Chat assistant *(requires `ANTHROPIC_API_KEY`)*
-- Natural-language queries: *"A Telugu thriller on Netflix"*, *"Movies like Interstellar"*
+### Chat assistant *(requires `GROQ_API_KEY`)*
+- Natural-language queries: *"A Telugu thriller on Netflix"*, *"Movies like Interstellar but not animated"*, *"Hindi movies under 2 hours"*, *"Christopher Nolan films from the 2000s"*
+- Franchises, characters and subjects: *"Batman movies"*, *"Star Wars films on JioHotstar"*, *"movies about time travel"*, *"zombie shows"*
+- Follow-ups keep the context: *"on Prime instead"*, *"newer ones"*, *"tell me about the second one"*
+- Answers questions about a title (director, runtime, where to watch in your region) from TMDB data
+- Manages your library: *"add Kantara to my watchlist"*, *"I watched Dune Part Two"*
 - Understands regional film industry names (Tollywood, Bollywood, Kollywood, K-drama …)
-- Claude Haiku powers intent detection; falls back gracefully when key is absent
+- Runs on Groq (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`); falls back to keyword matching when the key is absent or the model is unreachable (Groq refuses connections from many VPNs — see `TMDB_API_HOST` below for running without one)
 
 ### Account
 - Register / login with password hashing
@@ -50,7 +54,7 @@ A personalised movie & TV recommendation app built with Flask + Next.js, powered
 | Frontend | Next.js 15 (App Router) · Framer Motion |
 | Database | SQLite (auto-created, zero config) |
 | Movie data | TMDB v3 REST API |
-| AI chat | Anthropic Claude Haiku (optional) |
+| AI chat | Groq (`openai/gpt-oss-120b`, optional) |
 | Production server | Gunicorn |
 
 ---
@@ -117,14 +121,14 @@ cd frontend && npm install && cd ..
 
 ```bash
 cp .env.example .env
-# open .env and fill in TMDB_API_KEY (and optionally ANTHROPIC_API_KEY)
+# open .env and fill in TMDB_API_KEY (and optionally GROQ_API_KEY)
 ```
 
 Or export directly:
 
 ```bash
 export TMDB_API_KEY="your_tmdb_v3_key"
-export ANTHROPIC_API_KEY="your_anthropic_key"   # optional — enables chat
+export GROQ_API_KEY="your_groq_key"             # optional — enables chat
 export FLASK_SECRET_KEY="any-random-string"
 ```
 
@@ -176,7 +180,7 @@ User data is stored in a database. Render's free tier has an **ephemeral filesys
    |---|---|
    | `DATABASE_URL` | the Neon connection string from Step 1 |
    | `TMDB_API_KEY` | your TMDB v3 key |
-   | `ANTHROPIC_API_KEY` | your Anthropic key *(optional)* |
+   | `GROQ_API_KEY` | your Groq key *(optional)* |
    | `FRONTEND_ORIGINS` | leave blank for now — add your Vercel URL after step 3 |
 
 4. **Deploy**. Copy the service URL, e.g. `https://nextpick-api.onrender.com`.
@@ -233,7 +237,10 @@ The free [Neon](https://neon.tech) PostgreSQL tier is more than enough for perso
 | Variable | Default | Purpose |
 |---|---|---|
 | `TMDB_API_KEY` | *(required)* | TMDB v3 API key |
-| `ANTHROPIC_API_KEY` | *(optional)* | Enables Claude chat assistant |
+| `TMDB_API_HOST` | `api.themoviedb.org` | Which TMDB hostname to try first. The app switches to the other one (`api.tmdb.org`) by itself when a network blocks the first, so no VPN is needed; setting it only skips the first slow attempt after a restart |
+| `GROQ_API_KEY` | *(optional)* | Enables the chat assistant (Groq) |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Chat model — change it if Groq retires the default |
+| `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-20b` | Used when the main model is rate-limited or unavailable |
 | `FLASK_SECRET_KEY` | `dev-secret-change-me` | Flask session signing — **change in production** |
 | `BACKEND_ORIGIN` | `http://localhost:5001` | Backend URL used by Next.js rewrites |
 | `FRONTEND_ORIGINS` | `http://localhost:3000,...` | Comma-separated CORS allowed origins |
@@ -293,7 +300,7 @@ Message received
   → fast greeting check        (no API calls — DB only)
   → TMDB metadata fetch        (cached in Flask session)
   → keyword extraction         (regex, no API)
-  → Claude Haiku agent         (intent / filters / reference title)
+  → Groq agent                 (intent / filters / reference title)
   → TMDB discover or similar   (filtered catalog)
   → MovieRecommender           (scored & ranked)
   → JSON response

@@ -61,6 +61,14 @@ function MoonIcon() {
     </svg>
   );
 }
+function GlobeIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 function HomeIcon({ size = 22 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -101,40 +109,107 @@ function getInitials(username) {
 }
 
 /* ── Desktop search grid overlay ─────────────────────────────────────────── */
-function SearchGrid({ results, query, onSelect, onClose }) {
-  if (!results.length) {
-    return (
-      <div className="sg-overlay">
-        <div className="sg-empty">
-          <p className="sg-empty-text">No results for <strong>"{query}"</strong></p>
-          <p className="sg-empty-sub">Try a different title, person, or genre.</p>
-        </div>
-      </div>
-    );
-  }
+const SEARCH_TABS = ["All", "People", "Movies", "TV Shows"];
+
+function SearchGrid({ results, people, query, onSelect, onClose, router }) {
+  const [tab, setTab] = useState("All");
+
+  const movies = results.filter(r => r.content_type === "movie");
+  const tvShows = results.filter(r => r.content_type === "tv");
+
+  const tabItems = tab === "All" ? results
+    : tab === "People" ? []
+    : tab === "Movies" ? movies
+    : tvShows;
+
+  const tabPeople = tab === "All" ? (people || []).slice(0, 3) : tab === "People" ? (people || []) : [];
+
+  const isEmpty = tabItems.length === 0 && tabPeople.length === 0;
+
   return (
     <div className="sg-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sg-grid">
-        {results.map((item) => (
-          <button
-            key={`${item.content_type}-${item.tmdb_id}`}
-            className="sg-card"
-            onClick={() => onSelect(item)}
-            type="button"
-          >
-            {item.poster_url
-              ? <img src={item.poster_url} alt={item.title} className="sg-poster" />
-              : <div className="sg-poster sg-poster-fallback"><span>{item.title?.[0]}</span></div>
-            }
-            <div className="sg-card-overlay">
-              <span className="sg-card-title">{item.title}</span>
-              <span className="sg-card-meta">
-                {item.content_label}{item.year ? ` · ${item.year}` : ""}
-                {item.rating ? ` · ★ ${item.rating.toFixed(1)}` : ""}
-              </span>
+      <div className="sg-panel">
+        {/* Filter tabs */}
+        <div className="sg-tabs">
+          {SEARCH_TABS.map(t => (
+            <button
+              key={t}
+              className={`sg-tab${tab === t ? " sg-tab-active" : ""}`}
+              onClick={() => setTab(t)}
+              type="button"
+            >
+              {t}
+              {t === "People" && people?.length > 0 && <span className="sg-tab-count">{people.length}</span>}
+              {t === "Movies" && <span className="sg-tab-count">{movies.length}</span>}
+              {t === "TV Shows" && <span className="sg-tab-count">{tvShows.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        {isEmpty && (
+          <div className="sg-empty">
+            <p className="sg-empty-text">No results for <strong>"{query}"</strong></p>
+            <p className="sg-empty-sub">Try a different title, person, or genre.</p>
+          </div>
+        )}
+
+        {/* People row */}
+        {tabPeople.length > 0 && (
+          <div className="sg-people-row">
+            <span className="sg-section-label">People</span>
+            <div className="sg-people-list">
+              {tabPeople.map(p => (
+                <button
+                  key={p.id}
+                  className="sg-person-card"
+                  type="button"
+                  onClick={() => { onClose(); router.push(`/person/${p.id}`); }}
+                >
+                  {p.profile_url
+                    ? <img src={p.profile_url} alt={p.name} className="sg-person-avatar" />
+                    : <div className="sg-person-avatar sg-person-avatar-fallback">{p.name?.[0]}</div>
+                  }
+                  <div className="sg-person-info">
+                    <span className="sg-person-name">{p.name}</span>
+                    <span className="sg-person-dept">{p.known_for_department}</span>
+                    {p.known_for?.length > 0 && (
+                      <span className="sg-person-known">{p.known_for.slice(0, 2).join(", ")}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
             </div>
-          </button>
-        ))}
+          </div>
+        )}
+
+        {/* Title grid */}
+        {tabItems.length > 0 && (
+          <>
+            {tabPeople.length > 0 && <span className="sg-section-label sg-section-label-titles">Titles</span>}
+            <div className="sg-grid">
+              {tabItems.map(item => (
+                <button
+                  key={`${item.content_type}-${item.tmdb_id}`}
+                  className="sg-card"
+                  onClick={() => onSelect(item)}
+                  type="button"
+                >
+                  {item.poster_url
+                    ? <img src={item.poster_url} alt={item.title} className="sg-poster" />
+                    : <div className="sg-poster sg-poster-fallback"><span>{item.title?.[0]}</span></div>
+                  }
+                  <div className="sg-card-overlay">
+                    <span className="sg-card-title">{item.title}</span>
+                    <span className="sg-card-meta">
+                      {item.content_label}{item.year ? ` · ${item.year}` : ""}
+                      {item.rating ? ` · ★ ${item.rating.toFixed(1)}` : ""}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -227,22 +302,123 @@ function MobileSearch({ onClose, onSelect }) {
   );
 }
 
+/* ── Custom Cursor ────────────────────────────────────────────────────────── */
+function CustomCursor() {
+  const dotRef   = useRef(null);
+  const ringRef  = useRef(null);
+  const posRef   = useRef({ x: -100, y: -100 });
+  const ringPos  = useRef({ x: -100, y: -100 });
+  const rafRef   = useRef(null);
+
+  useEffect(() => {
+    const isTouchDevice = window.matchMedia("(hover: none)").matches;
+    if (isTouchDevice) return;
+
+    function onMove(e) {
+      posRef.current = { x: e.clientX, y: e.clientY };
+      if (dotRef.current) {
+        dotRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+      }
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function animate() {
+      ringPos.current.x = lerp(ringPos.current.x, posRef.current.x, 0.12);
+      ringPos.current.y = lerp(ringPos.current.y, posRef.current.y, 0.12);
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate(${ringPos.current.x}px, ${ringPos.current.y}px)`;
+      }
+      rafRef.current = requestAnimationFrame(animate);
+    }
+
+    function onEnterInteractive() { dotRef.current?.classList.add("cursor-hover"); ringRef.current?.classList.add("cursor-hover"); }
+    function onLeaveInteractive() { dotRef.current?.classList.remove("cursor-hover"); ringRef.current?.classList.remove("cursor-hover"); }
+
+    document.addEventListener("mousemove", onMove);
+    rafRef.current = requestAnimationFrame(animate);
+
+    const interactives = document.querySelectorAll("a, button, input, [role='button']");
+    interactives.forEach(el => {
+      el.addEventListener("mouseenter", onEnterInteractive);
+      el.addEventListener("mouseleave", onLeaveInteractive);
+    });
+
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return (
+    <>
+      <div ref={dotRef}  className="cursor-dot"  aria-hidden="true" />
+      <div ref={ringRef} className="cursor-ring" aria-hidden="true" />
+    </>
+  );
+}
+
 /* ── AppShell ─────────────────────────────────────────────────────────────── */
+function getPageTheme(pathname) {
+  if (!pathname) return "dashboard";
+  if (pathname.startsWith("/recommend")) return "recommend";
+  if (pathname.startsWith("/watchlist"))  return "watchlist";
+  if (pathname.startsWith("/history"))    return "history";
+  if (pathname.startsWith("/title"))      return "title";
+  return "dashboard";
+}
+
 export default function AppShell({ user, children }) {
   const pathname = usePathname();
   const router   = useRouter();
 
-  const [searchQuery,   setSearchQuery]   = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchActive,  setSearchActive]  = useState(false);
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [searchResults,  setSearchResults]  = useState([]);
+  const [searchPeople,   setSearchPeople]   = useState([]);
+  const [searchLoading,  setSearchLoading]  = useState(false);
+  const [searchActive,   setSearchActive]   = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const debounceRef = useRef(null);
   const inputRef    = useRef(null);
+  const searchBarRef = useRef(null);
 
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const [theme, setTheme] = useState("dark");
+
+  // Region: decides which streaming platforms and availability the user sees.
+  const [regions, setRegions] = useState([]);
+  const [region, setRegion] = useState(user?.region || "");
+  const [regionSaving, setRegionSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    // Same request the session guard makes — served from the in-memory cache.
+    apiRequest("/api/session")
+      .then((data) => {
+        if (!active) return;
+        setRegions(data.regions || []);
+        if (data.user?.region) setRegion(data.user.region);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  async function handleRegionChange(event) {
+    const next = event.target.value;
+    if (!next || next === region || regionSaving) return;
+    const previous = region;
+    setRegion(next);
+    setRegionSaving(true);
+    try {
+      await apiRequest("/api/settings/region", { method: "POST", body: JSON.stringify({ region: next }) });
+      // Platforms, availability and recommendations all depend on the region.
+      window.location.reload();
+    } catch {
+      setRegion(previous);
+      setRegionSaving(false);
+    }
+  }
 
   useEffect(() => {
     const saved = (typeof window !== "undefined" && localStorage.getItem("np-theme")) || "dark";
@@ -267,6 +443,7 @@ export default function AppShell({ user, children }) {
       try {
         const data = await apiRequest(`/api/search/live?query=${encodeURIComponent(q)}`);
         setSearchResults(data.results || []);
+        setSearchPeople(data.people || []);
       } catch { setSearchResults([]); }
       finally { setSearchLoading(false); }
     }, 220);
@@ -284,6 +461,21 @@ export default function AppShell({ user, children }) {
     return () => document.removeEventListener("keydown", fn);
   }, []);
 
+  // "/" focuses the search field, unless the user is already typing somewhere.
+  useEffect(() => {
+    const fn = (e) => {
+      if (e.key !== "/" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      if (!inputRef.current || inputRef.current.offsetParent === null) return;
+      e.preventDefault();
+      inputRef.current.focus();
+    };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
+  }, []);
+
   useEffect(() => {
     const fn = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false);
@@ -292,7 +484,18 @@ export default function AppShell({ user, children }) {
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  function clearSearch() { setSearchQuery(""); setSearchResults([]); setSearchActive(false); }
+  // Collapse search bar when clicking outside it
+  useEffect(() => {
+    const fn = (e) => {
+      if (searchBarRef.current && !searchBarRef.current.contains(e.target)) {
+        if (!searchQuery) setSearchExpanded(false);
+      }
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [searchQuery]);
+
+  function clearSearch() { setSearchQuery(""); setSearchResults([]); setSearchPeople([]); setSearchActive(false); setSearchExpanded(false); }
   function handleSelect(item) { clearSearch(); router.push(`/title/${item.content_type}/${item.tmdb_id}`); }
   async function handleLogout() {
     await apiRequest("/api/auth/logout", { method: "POST" });
@@ -302,7 +505,7 @@ export default function AppShell({ user, children }) {
   const isLight = theme === "light";
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-page={getPageTheme(pathname)}>
       {/* ── Top nav ── */}
       <nav className="top-nav">
         <div className="top-nav-inner">
@@ -335,24 +538,42 @@ export default function AppShell({ user, children }) {
           </div>
 
           <div className="nav-right">
-            {/* Desktop search bar */}
-            <div className={`nav-search-bar${searchActive ? " nav-search-active" : ""}`}>
-              <span className="nav-search-icon"><SearchIcon /></span>
+            {/* Desktop collapsing search bar */}
+            <div
+              ref={searchBarRef}
+              className={`nav-search-bar${searchExpanded ? " nav-search-expanded" : ""}${searchActive ? " nav-search-active" : ""}`}
+              onMouseEnter={() => setSearchExpanded(true)}
+              onClick={(e) => { if (e.target === e.currentTarget) inputRef.current?.focus(); }}
+            >
+              <button
+                className="nav-search-icon-btn"
+                type="button"
+                aria-label="Search"
+                onClick={() => { setSearchExpanded(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+              >
+                <SearchIcon />
+              </button>
               <input
                 ref={inputRef}
+                className="nav-search-input"
                 type="text"
                 placeholder="Titles, people, genres…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 aria-label="Search"
                 autoComplete="off"
+                spellCheck={false}
+                onFocus={() => setSearchExpanded(true)}
               />
-              {searchActive && (
-                <button className="nav-search-clear" onClick={clearSearch} aria-label="Clear" type="button">
-                  <CloseSearchIcon />
-                </button>
-              )}
-              {searchLoading && <span className="nav-search-spinner" />}
+              <div className="nav-search-trailing">
+                {searchLoading && <span className="nav-search-spinner" aria-hidden="true" />}
+                {searchActive && (
+                  <button className="nav-search-clear" onClick={clearSearch} aria-label="Clear" type="button">
+                    <CloseSearchIcon />
+                  </button>
+                )}
+                {!searchQuery && <kbd className="nav-search-kbd" aria-hidden="true">/</kbd>}
+              </div>
             </div>
 
             {/* Mobile search trigger — only visible on mobile via CSS */}
@@ -394,6 +615,25 @@ export default function AppShell({ user, children }) {
                       aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
                     />
                   </div>
+                  {regions.length > 0 && (
+                    <div className="nav-dropdown-region-row">
+                      <span className="nav-dropdown-theme-label">
+                        <GlobeIcon />
+                        Region
+                      </span>
+                      <select
+                        className="nav-region-select"
+                        value={region}
+                        onChange={handleRegionChange}
+                        disabled={regionSaving}
+                        aria-label="Your region — sets which streaming platforms are shown"
+                      >
+                        {regions.map((r) => (
+                          <option key={r.code} value={r.code}>{r.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="nav-dropdown-divider" />
                   <button className="nav-dropdown-item" onClick={handleLogout} role="menuitem">
                     Logout
@@ -431,9 +671,11 @@ export default function AppShell({ user, children }) {
       {searchActive && (
         <SearchGrid
           results={searchResults}
+          people={searchPeople}
           query={searchQuery.trim()}
           onSelect={handleSelect}
           onClose={clearSearch}
+          router={router}
         />
       )}
 

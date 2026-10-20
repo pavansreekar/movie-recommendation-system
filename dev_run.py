@@ -8,8 +8,15 @@ import sys
 import time
 from pathlib import Path
 
-
 BASE_DIR = Path(__file__).resolve().parent
+
+# Load .env before anything else so all env vars are available immediately
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+except ImportError:
+    pass
+
 FRONTEND_DIR = BASE_DIR / "frontend"
 BACKEND_FILE = BASE_DIR / "web_app.py"
 

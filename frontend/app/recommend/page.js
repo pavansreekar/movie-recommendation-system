@@ -22,8 +22,9 @@ const STEP_META = [
 ];
 const STEPS_COUNT = STEP_META.length;
 
-// Top platforms popular in India — shown regardless of TMDB provider availability
-const TOP_INDIA_PLATFORMS = [
+// Fallback only: the platform step normally shows the top streaming services for the
+// user's region, sent by the backend as `top_providers`.
+const FALLBACK_PLATFORMS = [
   "Netflix",
   "Amazon Prime Video",
   "JioHotstar",
@@ -134,9 +135,23 @@ function WizardCard({ stepKey, value, label, isSelected, isAny, onSelect, size }
   );
 }
 
+// ── RewatchToggle ─────────────────────────────────────────────────────────────
+
+function RewatchToggle({ on, onToggle }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} className={`wiz-rewatch${on ? " on" : ""}`} onClick={onToggle}>
+      <span className="wiz-rewatch-text">
+        <span className="wiz-rewatch-label">Don&apos;t mind rewatching</span>
+        <span className="wiz-rewatch-hint">Picks from your watched history</span>
+      </span>
+      <span className="wiz-switch" aria-hidden="true"><span className="wiz-switch-knob" /></span>
+    </button>
+  );
+}
+
 // ── WizardStep ────────────────────────────────────────────────────────────────
 
-function WizardStep({ step, stepIndex, filters, options, onSelect, onNext, onBack, canContinue, isLast, direction, showAllLanguages, onToggleLanguages }) {
+function WizardStep({ step, stepIndex, filters, options, onSelect, onNext, onBack, canContinue, isLast, direction, showAllLanguages, onToggleLanguages, regionName, rewatch, onToggleRewatch }) {
   const gridClass = `wiz-grid-${step.grid}`;
 
   function computeIsSelected(opt) {
@@ -171,7 +186,10 @@ function WizardStep({ step, stepIndex, filters, options, onSelect, onNext, onBac
           <span className="wiz-step-theme">{step.theme}</span>
         </div>
         <h2 className="wiz-step-title">{step.title}</h2>
-        <p className="wiz-step-subtitle">{step.subtitle}</p>
+        <p className="wiz-step-subtitle">
+          {step.subtitle}
+          {step.key === "platform" && regionName ? ` Showing what's popular in ${regionName} — change your region from the account menu.` : ""}
+        </p>
 
         <div className={gridClass}>
           {options.map((opt, i) => (
@@ -213,6 +231,7 @@ function WizardStep({ step, stepIndex, filters, options, onSelect, onNext, onBac
             {isLast ? "Find me a watch" : "Continue"}
             <i className="ti ti-arrow-right wiz-arrow" aria-hidden="true" />
           </button>
+          {step.key === "content_type" && <RewatchToggle on={rewatch} onToggle={onToggleRewatch} />}
         </div>
       </div>
     </motion.div>
@@ -278,6 +297,39 @@ function RecPosterGrid({ recs, watchingKeys, exitingKeys, watchlistingKeys, watc
   );
 }
 
+// Titles from the user's own history: no "mark watched" / "save" buttons (they've seen
+// them), but their own rating and what each shares with the chosen filters.
+function RewatchGrid({ picks }) {
+  return (
+    <div className="rec-poster-grid">
+      {picks.map((rec) => {
+        const m = rec.movie;
+        return (
+          <div className="rec-poster-card" key={`${m.content_type}-${m.tmdb_id}`}>
+            <Link href={`/title/${m.content_type}/${m.tmdb_id}`} className="rec-poster-link">
+              {m.poster_url ? <img src={m.poster_url} alt={m.title} /> : <div className="poster-fallback">{m.title}</div>}
+            </Link>
+            {m.user_rating != null && (
+              <span className="history-rating-badge" title={`You rated this ${m.user_rating}/10`}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+                {m.user_rating}
+              </span>
+            )}
+            <div className="rec-poster-overlay">
+              <span className="rewatch-caption">
+                <span className="rec-poster-title">{m.title}</span>
+                {rec.reasons?.length > 0 && <span className="rewatch-reasons">{rec.reasons.join(" · ")}</span>}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RecommendPage() {
@@ -290,6 +342,7 @@ export default function RecommendPage() {
   const [wizardDone, setWizardDone]           = useState(false);
   const [filters, setFilters]                 = useState(defaultFilters);
   const [showAllLanguages, setShowAllLanguages] = useState(false);
+  const [rewatch, setRewatch]                 = useState(false);   // "Don't mind rewatching"
 
   // Recs
   const [data, setData]                         = useState(null);
@@ -313,6 +366,14 @@ export default function RecommendPage() {
   const [fbLangDisplayed, setFbLangDisplayed] = useState([]);
   const [fbLangReserve,   setFbLangReserve]   = useState([]);
 
+  // "Since you've watched X" — personalized pick seeded from watch history (no reserve
+  // pool; the backend already sends the final 8, so a watch just shrinks the row)
+  const [watchedPick, setWatchedPick] = useState(null);           // { seed_title, ... } or null
+  const [watchedPickDisplayed, setWatchedPickDisplayed] = useState([]);
+
+  // Titles from the watch history matching the filters — null when the toggle was off
+  const [rewatchPicks, setRewatchPicks] = useState(null);
+
   // "Show me more" — tracks whether user has clicked the button yet
   const [showMoreClicked, setShowMoreClicked] = useState(false);
 
@@ -320,7 +381,7 @@ export default function RecommendPage() {
   const stepOptions = useMemo(() => {
     if (!data) return [];
     return STEP_META.map((m) => {
-      const availablePlatforms = TOP_INDIA_PLATFORMS;
+      const availablePlatforms = data.top_providers?.length ? data.top_providers : FALLBACK_PLATFORMS;
       const visibleLanguages = showAllLanguages
         ? (data.language_options || [])
         : TOP_LANGUAGES.filter(l => (data.language_options || []).includes(l));
@@ -412,6 +473,9 @@ export default function RecommendPage() {
     setFbGenDisplayed(g0);  setFbGenReserve(g1);
     setFbLangDisplayed(l0); setFbLangReserve(l1);
 
+    setWatchedPick(payload.watched_pick || null);
+    setWatchedPickDisplayed(payload.watched_pick?.items || []);
+
     setData(payload);
   }
 
@@ -437,8 +501,11 @@ export default function RecommendPage() {
         genres: filtersToUse.genres,
         platforms: filtersToUse.platforms,
         languages: filtersToUse.languages,
+        rewatch,
       };
-      applyPayload(await apiRequest("/api/dashboard/recommend", { method: "POST", body: JSON.stringify(payload) }));
+      const result = await apiRequest("/api/dashboard/recommend", { method: "POST", body: JSON.stringify(payload), timeoutMs: 60000 });
+      applyPayload(result);
+      setRewatchPicks(rewatch ? result.rewatch_picks || [] : null);
       setWatchlistedKeys(new Set());
     } catch (err) {
       setError(err.message);
@@ -486,6 +553,9 @@ export default function RecommendPage() {
     removeAndPromote(setFbPlatDisplayed, setFbPlatReserve);
     removeAndPromote(setFbGenDisplayed,  setFbGenReserve);
     removeAndPromote(setFbLangDisplayed, setFbLangReserve);
+
+    // No reserve pool for the watched-pick row — it just shrinks as titles are watched.
+    setWatchedPickDisplayed((prev) => prev.filter((r) => `${r.movie.content_type}-${r.movie.tmdb_id}` !== key));
   }
 
   async function toggleWatch(movie) {
@@ -561,6 +631,9 @@ export default function RecommendPage() {
   const showFallbacks = !recommending && hasFallbacks && (
     (!enoughForShowMore && filtersActive) || showMoreClicked
   );
+  // Personalized "since you've watched X" row — only once "Show me more" is clicked,
+  // and only ever present for returning users (backend omits it for first-timers).
+  const showWatchedPick = !recommending && showMoreClicked && watchedPickDisplayed.length > 0;
   // Button visible: wizard done, main recs exist, enough total results, not yet clicked
   const showShowMoreBtn = wizardDone && hasMainRecs && !recommending && enoughForShowMore && !showMoreClicked;
 
@@ -603,6 +676,7 @@ export default function RecommendPage() {
             {summaryTags.map((t) => (
               <span key={t.key} className="wiz-summary-tag">{t.label}</span>
             ))}
+            {rewatch && <span className="wiz-summary-tag">Rewatches welcome</span>}
             <button className="wiz-reconfig" type="button" onClick={reconfigure}>
               <i className="ti ti-adjustments-horizontal" style={{ marginRight: 5, verticalAlign: "-2px" }} />
               Reconfigure
@@ -642,6 +716,9 @@ export default function RecommendPage() {
                   direction={direction}
                   showAllLanguages={showAllLanguages}
                   onToggleLanguages={() => setShowAllLanguages((v) => !v)}
+                  regionName={data.region_name}
+                  rewatch={rewatch}
+                  onToggleRewatch={() => setRewatch((v) => !v)}
                 />
               )}
             </AnimatePresence>
@@ -713,6 +790,35 @@ export default function RecommendPage() {
                     Show me more
                   </button>
                 </div>
+              )}
+
+              {/* ── "Don't mind rewatching": matches from their own watch history ── */}
+              {rewatchPicks && (
+                <>
+                  <section className="section-head rewatch-head">
+                    <span className="section-kicker">From your watched history</span>
+                    <h2> Relive the moments</h2>
+                  </section>
+                  {rewatchPicks.length > 0 ? (
+                    <RewatchGrid picks={rewatchPicks} />
+                  ) : (
+                    <div className="empty-state premium-card">
+                      {(data.watched_items || []).length === 0
+                        ? "Nothing in your watched history yet — titles you mark as watched will show up here to rewatch."
+                        : "Nothing in your watched history matches these filters yet."}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Personalized pick, seeded from watch history ── */}
+              {showWatchedPick && (
+                <>
+                  <p className="fallback-label" style={{ marginTop: "1.5rem" }}>
+                    <strong>Since you&apos;ve watched {watchedPick?.seed_title}</strong>, we picked these for you:
+                  </p>
+                  <RecPosterGrid recs={watchedPickDisplayed} {...sharedGridProps} />
+                </>
               )}
 
               {/* ── 3-tier fallbacks ── */}

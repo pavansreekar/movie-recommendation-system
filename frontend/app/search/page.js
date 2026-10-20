@@ -180,11 +180,7 @@ function SearchContent() {
           From Cult Classics To Current Hits
         </h2>
 
-        <form
-          className="form-grid"
-          style={{ gridTemplateColumns: "1fr auto", alignItems: "end" }}
-          onSubmit={handleFormSubmit}
-        >
+        <form className="form-grid search-form" onSubmit={handleFormSubmit}>
           <label style={{ position: "relative" }} ref={wrapperRef}>
             <span>Title</span>
             <input
@@ -196,7 +192,7 @@ function SearchContent() {
               autoComplete="off"
             />
             {showDropdown && suggestions.length > 0 && (
-              <ul style={{
+              <ul className="search-suggest-list" style={{
                 position: "absolute",
                 top: "calc(100% + 6px)",
                 left: 0,

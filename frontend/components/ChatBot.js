@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiRequest } from "../lib/api";
+import { apiRequest, clearApiCache } from "../lib/api";
+import { emitLibraryChange } from "../lib/watchHistorySync";
 
 function ChatIcon() {
   return (
@@ -85,7 +86,14 @@ export default function ChatBot() {
     apiRequest("/api/chat/history")
       .then((data) => {
         if (data?.history?.length) {
-          setMessages(data.history.map((m) => ({ role: m.role, content: m.content })));
+          setMessages(
+            data.history.map((m) => ({
+              role: m.role,
+              content: m.content,
+              recs: m.recs || [],
+              error: null,
+            }))
+          );
         }
       })
       .catch(() => {});
@@ -115,8 +123,14 @@ export default function ChatBot() {
       const data = await apiRequest("/api/chat", {
         method: "POST",
         body: JSON.stringify({ message: trimmed }),
-        timeoutMs: 60000, // chat can be slow — Claude + TMDB calls
+        timeoutMs: 60000, // chat can be slow — model + TMDB calls
       });
+      if (data.data_changed) {
+        // The assistant edited the watchlist or history: drop cached lists and
+        // let any page showing them reload.
+        clearApiCache();
+        emitLibraryChange();
+      }
       setMessages((prev) => [
         ...prev,
         {

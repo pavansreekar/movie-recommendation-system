@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
-import { emitWatchHistoryChange } from "../../lib/watchHistorySync";
+import { emitWatchHistoryChange, LIBRARY_EVENT } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
 
 const LANG_LABELS = {
@@ -44,7 +44,10 @@ export default function WatchlistPage() {
   }
 
   useEffect(() => {
-    if (session.authenticated) loadWatchlist();
+    if (!session.authenticated) return undefined;
+    loadWatchlist();
+    window.addEventListener(LIBRARY_EVENT, loadWatchlist);
+    return () => window.removeEventListener(LIBRARY_EVENT, loadWatchlist);
   }, [session.authenticated]);
 
   async function removeItem(item) {
@@ -116,11 +119,11 @@ export default function WatchlistPage() {
 
   return (
     <AppShell user={session.user}>
-      <section className="hero premium-card compact-hero" style={{ padding: "1.5rem 1.8rem" }}>
+      <section className="hero premium-card compact-hero lib-hero-card">
         <div className="hero-with-filters">
           <div className="hero-text">
             <span className="section-kicker">Watchlist</span>
-            <h1 style={{ margin: "0.55rem 0 0.5rem", fontSize: "2.3rem", lineHeight: 0.98, letterSpacing: "-0.05em" }}>
+            <h1 className="lib-hero-title">
               Saved for later
             </h1>
             <p style={{ margin: 0 }}>
