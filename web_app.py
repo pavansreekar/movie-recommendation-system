@@ -14,7 +14,7 @@ try:
 except ImportError:
     pass
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -94,7 +94,25 @@ _INDIA_OTT_PROVIDER_IDS = [8, 119, 122, 2336, 232, 237, 532, 309]
 _INDIA_OTT_PROVIDER_NAMES = ["Netflix", "Prime Video", "JioHotstar"]
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
+# Render sets RENDER=true. There, a missing secret or database is a deploy error rather
+# than something to fall back from: a guessable secret lets anyone forge a login, and
+# without DATABASE_URL every account would live on a disk that is wiped on each restart.
+IN_PRODUCTION = os.getenv("RENDER", "").strip().lower() == "true"
+_secret_key = os.getenv("FLASK_SECRET_KEY", "").strip()
+if IN_PRODUCTION and (len(_secret_key) < 16 or _secret_key == "dev-secret-change-me"):
+    raise RuntimeError("FLASK_SECRET_KEY must be set to a long random value in production.")
+if IN_PRODUCTION and not os.getenv("DATABASE_URL", "").strip():
+    raise RuntimeError(
+        "DATABASE_URL must point to the production Postgres database (e.g. Neon); "
+        "without it all user data is lost whenever the server restarts."
+    )
+app.secret_key = _secret_key or "dev-secret-change-me"
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),   # stay signed in, not just until the browser closes
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=IN_PRODUCTION,             # HTTPS-only cookie on the live site
+)
 FRONTEND_ORIGINS = {
     value.strip()
     for value in os.getenv(
@@ -721,6 +739,7 @@ def api_login() -> Any:
         return jsonify({"ok": False, "error": "Invalid username or password."}), 401
     username_value = get_db().get_username(int(user_id))
     session.clear()
+    session.permanent = True
     session["user_id"] = user_id
     session["username"] = username_value
     return jsonify(
@@ -3292,12 +3311,12 @@ def api_chat() -> Any:
 
         return _chat_response(db, user_id, bot_reply, recommendations, error_msg, filters_used)
 
-    except Exception as exc:
+    except Exception:
         import traceback
         traceback.print_exc()
         return jsonify({
             "ok": False,
-            "error": f"Something went wrong on the server: {exc}",
+            "error": "Something went wrong on the server.",   # details go to the server log only
             "reply": "Sorry, I ran into an error. Please try again.",
             "recommendations": [],
             "filters_used": {},

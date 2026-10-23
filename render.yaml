@@ -7,7 +7,9 @@ services:
     name: nextpick-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120
+    # 2 processes x 4 threads: a slow search no longer holds up everyone else's requests
+    startCommand: gunicorn web_app:app --workers 2 --threads 4 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /api/session
     plan: free
     envVars:
       - key: TMDB_API_KEY
