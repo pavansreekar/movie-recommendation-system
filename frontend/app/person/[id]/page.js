@@ -6,6 +6,7 @@ import Link from "next/link";
 import AppShell from "../../../components/AppShell";
 import { apiRequest } from "../../../lib/api";
 import { useSessionGuard } from "../../../components/useSessionGuard";
+import { PageLoader } from "../../../components/Loading";
 
 function FilmIcon() {
   return (
@@ -59,11 +60,7 @@ export default function PersonPage({ params }) {
   }, [id, ready]);
 
   if (session.loading) {
-    return (
-      <div className="person-loading">
-        <div className="person-loading-spinner" />
-      </div>
-    );
+    return <PageLoader messages={["Loading profile", "Gathering their films and shows"]} />;
   }
   if (!session.authenticated) return null;
 
@@ -93,9 +90,7 @@ export default function PersonPage({ params }) {
     <AppShell user={user}>
       <div className="person-page">
         {loading && (
-          <div className="person-loading">
-            <div className="person-loading-spinner" />
-          </div>
+          <PageLoader compact messages={["Loading profile", "Gathering their films and shows"]} />
         )}
 
         {error && (

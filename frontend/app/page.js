@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../lib/api";
 import { useSessionGuard } from "../components/useSessionGuard";
+import { StatusLine } from "../components/Loading";
 
 export default function HomePage() {
   const router = useRouter();
@@ -170,8 +171,11 @@ export default function HomePage() {
         </form>
 
         {busy === "waking" && (
-          <div className="alert alert-info" style={{ marginTop: "1rem" }} aria-live="polite">
-            Waking up the server. After a quiet spell this can take up to a minute.
+          <div className="alert alert-info" style={{ marginTop: "1rem" }}>
+            <StatusLine
+              interval={2800}
+              messages={["Waking up the server", "After a quiet spell this can take up to a minute", "Almost there"]}
+            />
           </div>
         )}
         {message && <div className="alert alert-success" style={{ marginTop: "1rem" }}>{message}</div>}

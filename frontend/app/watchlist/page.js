@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "../../components/AppShell";
-import { apiRequest } from "../../lib/api";
+import { apiRequest, requestWithRetry } from "../../lib/api";
 import { emitWatchHistoryChange, LIBRARY_EVENT } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
+import { PageLoader, PosterSkeleton, SectionError } from "../../components/Loading";
 
 const LANG_LABELS = {
   te: "Telugu", hi: "Hindi", en: "English", ta: "Tamil",
@@ -31,6 +32,7 @@ function EyeCheckIcon() {
 export default function WatchlistPage() {
   const session = useSessionGuard();
   const [items, setItems] = useState([]);
+  const [listState, setListState] = useState("loading");   // "loading" | "ready" | "error"
   const [removingKey, setRemovingKey] = useState("");
   const [watchingKey, setWatchingKey] = useState("");
 
@@ -43,11 +45,20 @@ export default function WatchlistPage() {
     setItems(payload.watchlist_items || []);
   }
 
+  // Until the first load lands, show placeholders rather than "No titles in your watchlist".
+  function firstLoad() {
+    setListState("loading");
+    requestWithRetry("/api/watchlist")
+      .then((payload) => { setItems(payload.watchlist_items || []); setListState("ready"); })
+      .catch(() => setListState("error"));
+  }
+
   useEffect(() => {
     if (!session.authenticated) return undefined;
-    loadWatchlist();
-    window.addEventListener(LIBRARY_EVENT, loadWatchlist);
-    return () => window.removeEventListener(LIBRARY_EVENT, loadWatchlist);
+    firstLoad();
+    const refresh = () => loadWatchlist().catch(() => {});
+    window.addEventListener(LIBRARY_EVENT, refresh);
+    return () => window.removeEventListener(LIBRARY_EVENT, refresh);
   }, [session.authenticated]);
 
   async function removeItem(item) {
@@ -114,7 +125,7 @@ export default function WatchlistPage() {
   }
 
   if (session.loading || !session.authenticated) {
-    return <div className="loading-screen">Loading watchlist...</div>;
+    return <PageLoader messages={["Opening your watchlist", "Fetching posters and platforms"]} />;
   }
 
   return (
@@ -184,7 +195,11 @@ export default function WatchlistPage() {
         </div>
       </section>
 
-      {items.length === 0 ? (
+      {listState === "loading" ? (
+        <PosterSkeleton count={12} gridClass="history-poster-grid" caption={["Loading your watchlist", "Fetching posters and platforms"]} />
+      ) : listState === "error" && items.length === 0 ? (
+        <SectionError what="your watchlist" onRetry={firstLoad} />
+      ) : items.length === 0 ? (
         <div className="empty-state premium-card">
           No titles in your watchlist yet. Hit the bookmark icon on any recommendation to save it here.
         </div>
@@ -199,7 +214,7 @@ export default function WatchlistPage() {
           </button>
         </div>
       ) : (
-        <section className="history-poster-grid">
+        <section className="history-poster-grid np-reveal">
           {filtered.map((item) => {
             const itemKey = `${item.content_type}-${item.tmdb_id}`;
             const isRemoving = removingKey === itemKey;

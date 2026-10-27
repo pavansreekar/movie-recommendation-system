@@ -7,6 +7,7 @@ import AppShell from "../../../../components/AppShell";
 import { apiRequest } from "../../../../lib/api";
 import { emitWatchHistoryChange } from "../../../../lib/watchHistorySync";
 import { useSessionGuard } from "../../../../components/useSessionGuard";
+import { PageLoader } from "../../../../components/Loading";
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 function StarIcon() {
@@ -307,11 +308,7 @@ export default function TitlePage({ params }) {
   }
 
   if (session.loading || !session.authenticated || loading) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-pulse">Loading title…</div>
-      </div>
-    );
+    return <PageLoader messages={["Loading title", "Fetching cast and crew", "Finding where to stream it", "Lining up the trailer"]} />;
   }
 
   if (!detail) {

@@ -7,6 +7,7 @@ import AppShell from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
 import { emitWatchHistoryChange } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
+import { LoaderMark, PageLoader, StatusLine } from "../../components/Loading";
 
 const DISPLAY_COUNT    = 16;
 const FALLBACK_DISPLAY = 8;
@@ -599,8 +600,10 @@ export default function RecommendPage() {
 
   const sharedGridProps = { watchingKeys, exitingKeys, watchlistingKeys, watchlistedKeys, onWatch: toggleWatch, onWatchlist: toggleWatchlist };
 
-  if (session.loading || (session.authenticated && loading)) return <div className="loading-screen">Loading...</div>;
-  if (!session.authenticated) return <div className="loading-screen">Redirecting...</div>;
+  if (session.loading || (session.authenticated && loading)) {
+    return <PageLoader messages={["Preparing your recommender", "Loading genres, platforms and languages", "Reading your watch history"]} />;
+  }
+  if (!session.authenticated) return <PageLoader messages="Taking you to sign in" />;
   if (!data) {
     return (
       <AppShell user={session.user}>
@@ -738,11 +741,17 @@ export default function RecommendPage() {
 
           {recommending ? (
             <div className="wiz-rec-loading premium-card">
-              <div className="wiz-rec-spinner" />
+              <LoaderMark size={52} />
               <div className="wiz-rec-loading-title">Finding your matches…</div>
-              <div className="wiz-rec-loading-sub">
-                Searching across {summaryTags.map(t => t.label).filter(l => l !== "Any").join(", ") || "all titles"}
-              </div>
+              <StatusLine
+                className="wiz-rec-loading-sub"
+                messages={[
+                  `Searching across ${summaryTags.map(t => t.label).filter(l => l !== "Any").join(", ") || "all titles"}`,
+                  "Scoring titles against your taste",
+                  "Checking what streams in your region",
+                  "Ranking your best matches",
+                ]}
+              />
             </div>
           ) : (
             <>

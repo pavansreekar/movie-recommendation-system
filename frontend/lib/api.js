@@ -56,6 +56,19 @@ export function apiRequest(path, options = {}) {
   return promise;
 }
 
+// For page data that matters on first load. Right after the server wakes up or restarts a
+// request can be slow or fail once, so it is retried a few times before giving up.
+export async function requestWithRetry(path, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await apiRequest(path, { timeoutMs: 45000 });
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
+    }
+  }
+}
+
 async function rawRequest(path, options = {}) {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, headers, ...restOptions } = options;
   const controller = signal ? null : new AbortController();

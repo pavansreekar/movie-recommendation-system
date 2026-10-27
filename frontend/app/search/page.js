@@ -7,6 +7,7 @@ import AppShell from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
 import { emitWatchHistoryChange, WATCH_HISTORY_EVENT } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
+import { PageLoader } from "../../components/Loading";
 
 function SearchContent() {
   const session = useSessionGuard();
@@ -164,7 +165,7 @@ function SearchContent() {
   }
 
   if (session.loading || !session.authenticated) {
-    return <div className="loading-screen">Loading...</div>;
+    return <PageLoader messages="Getting search ready" />;
   }
 
   return (
@@ -299,7 +300,7 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="loading-screen">Loading...</div>}>
+    <Suspense fallback={<PageLoader messages="Getting search ready" />}>
       <SearchContent />
     </Suspense>
   );

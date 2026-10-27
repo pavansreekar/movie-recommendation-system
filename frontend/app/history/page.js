@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "../../components/AppShell";
-import { apiRequest } from "../../lib/api";
+import { apiRequest, requestWithRetry } from "../../lib/api";
 import { emitWatchHistoryChange, LIBRARY_EVENT } from "../../lib/watchHistorySync";
 import { useSessionGuard } from "../../components/useSessionGuard";
+import { PageLoader, PosterSkeleton, SectionError } from "../../components/Loading";
 
 const LANG_LABELS = {
   te: "Telugu", hi: "Hindi", en: "English", ta: "Tamil",
@@ -22,6 +23,7 @@ function langLabel(code) {
 export default function HistoryPage() {
   const session = useSessionGuard();
   const [items, setItems] = useState([]);
+  const [listState, setListState] = useState("loading");   // "loading" | "ready" | "error"
   const [removingKey, setRemovingKey] = useState("");
 
   const [genreFilter, setGenreFilter] = useState("");
@@ -34,11 +36,20 @@ export default function HistoryPage() {
     setItems(payload.watched_items || []);
   }
 
+  // Until the first load lands, show placeholders rather than "No watched history yet".
+  function firstLoad() {
+    setListState("loading");
+    requestWithRetry("/api/history")
+      .then((payload) => { setItems(payload.watched_items || []); setListState("ready"); })
+      .catch(() => setListState("error"));
+  }
+
   useEffect(() => {
     if (!session.authenticated) return undefined;
-    loadHistory();
-    window.addEventListener(LIBRARY_EVENT, loadHistory);
-    return () => window.removeEventListener(LIBRARY_EVENT, loadHistory);
+    firstLoad();
+    const refresh = () => loadHistory().catch(() => {});
+    window.addEventListener(LIBRARY_EVENT, refresh);
+    return () => window.removeEventListener(LIBRARY_EVENT, refresh);
   }, [session.authenticated]);
 
   async function removeItem(item) {
@@ -95,7 +106,7 @@ export default function HistoryPage() {
   }
 
   if (session.loading || !session.authenticated) {
-    return <div className="loading-screen">Loading history...</div>;
+    return <PageLoader messages={["Opening your watch history", "Gathering your ratings"]} />;
   }
 
   return (
@@ -175,7 +186,11 @@ export default function HistoryPage() {
         </div>
       </section>
 
-      {items.length === 0 ? (
+      {listState === "loading" ? (
+        <PosterSkeleton count={12} gridClass="history-poster-grid" caption={["Loading your watch history", "Gathering your ratings"]} />
+      ) : listState === "error" && items.length === 0 ? (
+        <SectionError what="your watch history" onRetry={firstLoad} />
+      ) : items.length === 0 ? (
         <div className="empty-state premium-card">No watched history yet.</div>
       ) : filtered.length === 0 ? (
         <div className="empty-state premium-card">
@@ -188,7 +203,7 @@ export default function HistoryPage() {
           </button>
         </div>
       ) : (
-        <section className="history-poster-grid">
+        <section className="history-poster-grid np-reveal">
           {filtered.map((item) => {
             const itemKey = `${item.content_type}-${item.tmdb_id}`;
             const isRemoving = removingKey === itemKey;

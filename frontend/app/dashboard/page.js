@@ -3,31 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "../../components/AppShell";
-import { apiRequest } from "../../lib/api";
+import { requestWithRetry as loadWithRetry } from "../../lib/api";
 import { useSessionGuard } from "../../components/useSessionGuard";
+import { PageLoader, PosterSkeleton, SectionError, SpotlightSkeleton } from "../../components/Loading";
 import { useRouter } from "next/navigation";
-
-// Right after the server wakes up or restarts, these TMDB-backed sections can take a while
-// or fail once, so each one is retried a few times before it gives up.
-async function loadWithRetry(path, attempts = 3) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await apiRequest(path, { timeoutMs: 45000 });
-    } catch (error) {
-      if (attempt >= attempts) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
-    }
-  }
-}
-
-function SectionError({ what, onRetry }) {
-  return (
-    <div className="section-error">
-      <span>Couldn't load {what}. The server may still be starting up.</span>
-      <button type="button" className="section-error-btn" onClick={onRetry}>Try again</button>
-    </div>
-  );
-}
 
 export default function HomePage() {
   const session = useSessionGuard();
@@ -71,10 +50,10 @@ export default function HomePage() {
   const ottProviders = ott && ott !== "error" ? ott.providers : [];
 
   if (session.loading) {
-    return <div className="loading-screen">Loading...</div>;
+    return <PageLoader messages={["Loading your home", "Picking today's highlight", "Fetching what's trending"]} />;
   }
   if (!session.authenticated) {
-    return <div className="loading-screen">Redirecting...</div>;
+    return <PageLoader messages="Taking you to sign in" />;
   }
 
   return (
@@ -107,8 +86,7 @@ export default function HomePage() {
 
       {/* ── Today's Pick ── */}
       {todaysPick === undefined ? (
-        /* Loading skeleton */
-        <div className="todays-pick-skeleton" />
+        <SpotlightSkeleton caption={["Picking today's highlight", "Matching it to your taste", "Fetching the artwork"]} />
       ) : todaysPick === "error" ? (
         <SectionError what="Today's Pick" onRetry={loadTodaysPick} />
       ) : todaysPick ? (
@@ -118,7 +96,7 @@ export default function HomePage() {
             <h2>Today's Pick</h2>
           </section>
 
-          <div className="todays-pick">
+          <div className="todays-pick np-reveal">
             {/* Backdrop */}
             {todaysPick.backdrop_url
               ? <img className="todays-pick-backdrop" src={todaysPick.backdrop_url} alt="" aria-hidden="true" />
@@ -207,7 +185,9 @@ export default function HomePage() {
       ) : null}
 
       {/* Trending */}
-      {trending === undefined && <div className="poster-row-skeleton" />}
+      {trending === undefined && (
+        <PosterSkeleton count={8} caption={["Fetching what's trending worldwide", "Lining up the posters"]} />
+      )}
       {trending === "error" && <SectionError what="trending titles" onRetry={loadTrending} />}
       {Array.isArray(trending) && trending.length > 0 && (
         <>
@@ -215,7 +195,7 @@ export default function HomePage() {
             <span className="section-kicker">Trending Today</span>
             <h2>Top Searches Across the Globe</h2>
           </section>
-          <div className="trending-poster-grid">
+          <div className="trending-poster-grid np-reveal">
             {trending.slice(0, 16).map((item) => (
               <Link
                 key={`${item.content_type}-${item.tmdb_id}`}
@@ -250,7 +230,9 @@ export default function HomePage() {
       )}
 
       {/* Latest OTT Releases */}
-      {ott === undefined && <div className="poster-row-skeleton" />}
+      {ott === undefined && (
+        <PosterSkeleton row count={10} caption={["Checking new arrivals on your platforms", "Sorting by release date"]} />
+      )}
       {ott === "error" && <SectionError what="the latest streaming releases" onRetry={loadOtt} />}
       {ottReleases.length > 0 && (
         <>
@@ -262,7 +244,7 @@ export default function HomePage() {
                 : "Recent Arrivals on your streaming platforms"}
             </h2>
           </section>
-          <div className="ott-scroll-row">
+          <div className="ott-scroll-row np-reveal">
             {ottReleases.map((item) => (
               <Link
                 key={`${item.content_type}-${item.tmdb_id}`}
