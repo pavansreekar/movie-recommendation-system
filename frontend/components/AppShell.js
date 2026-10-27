@@ -111,7 +111,7 @@ function getInitials(username) {
 /* ── Desktop search grid overlay ─────────────────────────────────────────── */
 const SEARCH_TABS = ["All", "People", "Movies", "TV Shows"];
 
-function SearchGrid({ results, people, query, onSelect, onClose, router }) {
+function SearchGrid({ results, people, query, loading, onSelect, onClose, router }) {
   const [tab, setTab] = useState("All");
 
   const movies = results.filter(r => r.content_type === "movie");
@@ -146,7 +146,14 @@ function SearchGrid({ results, people, query, onSelect, onClose, router }) {
           ))}
         </div>
 
-        {isEmpty && (
+        {isEmpty && loading && (
+          <div className="sg-empty" aria-live="polite">
+            <span className="nav-search-spinner sg-empty-spinner" aria-hidden="true" />
+            <p className="sg-empty-sub">Searching for <strong>"{query}"</strong>…</p>
+          </div>
+        )}
+
+        {isEmpty && !loading && (
           <div className="sg-empty">
             <p className="sg-empty-text">No results for <strong>"{query}"</strong></p>
             <p className="sg-empty-sub">Try a different title, person, or genre.</p>
@@ -222,20 +229,22 @@ function MobileSearch({ onClose, onSelect }) {
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  const requestRef = useRef(0);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
-    if (!q) { setResults([]); return; }
+    const request = ++requestRef.current;   // a reply to an older query is ignored
+    if (!q) { setResults([]); setLoading(false); return; }
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       try {
         const data = await apiRequest(`/api/search/live?query=${encodeURIComponent(q)}`);
-        setResults(data.results || []);
-      } catch { setResults([]); }
-      finally { setLoading(false); }
+        if (request === requestRef.current) setResults(data.results || []);
+      } catch { if (request === requestRef.current) setResults([]); }
+      finally { if (request === requestRef.current) setLoading(false); }
     }, 220);
     return () => clearTimeout(debounceRef.current);
   }, [query]);
@@ -378,6 +387,7 @@ export default function AppShell({ user, children }) {
   const [searchActive,   setSearchActive]   = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
   const debounceRef = useRef(null);
+  const searchRequestRef = useRef(0);
   const inputRef    = useRef(null);
   const searchBarRef = useRef(null);
 
@@ -436,16 +446,20 @@ export default function AppShell({ user, children }) {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = searchQuery.trim();
-    if (!q) { setSearchResults([]); setSearchActive(false); return; }
+    const request = ++searchRequestRef.current;   // a reply to an older query is ignored
+    if (!q) { setSearchResults([]); setSearchActive(false); setSearchLoading(false); return; }
     setSearchActive(true);
     setSearchLoading(true);
     debounceRef.current = setTimeout(async () => {
       try {
         const data = await apiRequest(`/api/search/live?query=${encodeURIComponent(q)}`);
+        if (request !== searchRequestRef.current) return;
         setSearchResults(data.results || []);
         setSearchPeople(data.people || []);
-      } catch { setSearchResults([]); }
-      finally { setSearchLoading(false); }
+      } catch {
+        if (request === searchRequestRef.current) { setSearchResults([]); setSearchPeople([]); }
+      }
+      finally { if (request === searchRequestRef.current) setSearchLoading(false); }
     }, 220);
     return () => clearTimeout(debounceRef.current);
   }, [searchQuery]);
@@ -673,6 +687,7 @@ export default function AppShell({ user, children }) {
           results={searchResults}
           people={searchPeople}
           query={searchQuery.trim()}
+          loading={searchLoading}
           onSelect={handleSelect}
           onClose={clearSearch}
           router={router}

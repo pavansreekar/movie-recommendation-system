@@ -3777,6 +3777,7 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
 }
 .sg-empty-text { font-size: 1.1rem; color: var(--text); margin: 0; }
 .sg-empty-sub  { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.sg-empty-spinner { width: 22px; height: 22px; }
 
 /* Responsive */
 @media (max-width: 900px) {
