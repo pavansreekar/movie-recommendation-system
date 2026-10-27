@@ -78,7 +78,12 @@ async function rawRequest(path, options = {}) {
     const payload = isJson ? await response.json() : null;
 
     if (!response.ok) {
-      throw new Error(payload?.error || payload?.message || "Request failed.");
+      // Without a JSON error the reply came from the hosting layer, not the app: 502–504
+      // mean the server is starting up, restarting or overloaded.
+      const fallback = response.status >= 502 && response.status <= 504
+        ? "The server is busy or starting up. Please try again in a few seconds."
+        : "Request failed.";
+      throw new Error(payload?.error || payload?.message || fallback);
     }
 
     return payload;

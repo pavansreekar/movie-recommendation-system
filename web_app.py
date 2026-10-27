@@ -220,6 +220,13 @@ def tmdb_error_response(error: RuntimeError, status_code: int = 503):
     return jsonify({"ok": False, "error": str(error)}), status_code
 
 
+@app.errorhandler(500)
+def api_server_error(error):
+    # Flask has already logged the traceback. Answer in JSON so the site can show a real
+    # message instead of a generic "Request failed."
+    return jsonify({"ok": False, "error": "Something went wrong on the server. Please try again."}), 500
+
+
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin", "")

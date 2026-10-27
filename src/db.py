@@ -11,6 +11,10 @@ from pathlib import Path
 from .auth import hash_password, verify_password
 from .recommender import Movie
 
+# Pooled Postgres connections idle longer than this are replaced rather than reused: Neon
+# suspends the database after 5 idle minutes and the old connection may be dead.
+PG_MAX_IDLE_SECONDS = 240
+
 
 # ---------------------------------------------------------------------------
 # PostgreSQL compatibility shim
@@ -104,25 +108,41 @@ class Database:
 
         with self._pg_lock:
             if self._pg_pool is None:
+                # The timeouts make a dead connection fail in seconds instead of hanging the
+                # request: connect_timeout bounds opening one, tcp_user_timeout (ms) bounds a
+                # query the server never acknowledges.
                 self._pg_pool = pool.ThreadedConnectionPool(
                     1, 10, self._pg_url,
+                    connect_timeout=10, tcp_user_timeout=10000,
                     keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
                 )
         raw = self._pg_pool.getconn()
-        idle = time.time() - self._pg_last_used.get(id(raw), 0)
-        if raw.closed or idle > 30:
+        last_used = self._pg_last_used.get(id(raw))   # None: a connection just opened
+        idle = time.time() - last_used if last_used is not None else 0
+        if idle > PG_MAX_IDLE_SECONDS:
+            # Neon suspends an idle database after 5 minutes, which can leave this connection
+            # dead without either side noticing. Don't test it; open a fresh one.
+            self._pg_discard(raw)
+            raw = self._pg_pool.getconn()
+        elif raw.closed or idle > 30:
             try:
                 with raw.cursor() as cur:
                     cur.execute("SELECT 1")
                 raw.rollback()
             except (psycopg2.OperationalError, psycopg2.InterfaceError):
-                self._pg_pool.putconn(raw, close=True)
+                self._pg_discard(raw)
                 raw = self._pg_pool.getconn()
         return raw
 
     def _pg_release(self, raw, broken: bool) -> None:
         self._pg_last_used[id(raw)] = time.time()
         self._pg_pool.putconn(raw, close=broken or raw.closed)
+        if raw.closed:   # the pool also closes any beyond the one it keeps idle
+            self._pg_last_used.pop(id(raw), None)
+
+    def _pg_discard(self, raw) -> None:
+        self._pg_last_used.pop(id(raw), None)
+        self._pg_pool.putconn(raw, close=True)
 
     def _pk(self) -> str:
         """Auto-increment primary key DDL fragment."""
