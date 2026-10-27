@@ -23,7 +23,9 @@ TMDB_API_PREFIX = "/3"
 # Slow-changing reference data can be cached far longer than listings.
 STATIC_PATH_PREFIXES = ("/configuration", "/genre/", "/watch/providers/")
 STATIC_CACHE_TTL_SECONDS = 24 * 60 * 60
-MAX_CACHE_ENTRIES = 2000
+# Detailed title payloads are large once parsed; this keeps the cache well inside the free
+# Render instance's 512 MB.
+MAX_CACHE_ENTRIES = 800
 # Once a call has used up its retries on network errors, further calls fail at once for
 # this long instead of each waiting out its own timeouts. One page or chat reply makes
 # many calls, and during an outage those waits used to stack up into minutes.

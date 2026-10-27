@@ -189,7 +189,7 @@ User data is stored in a database. Render's free tier has an **ephemeral filesys
 
 New → **Web Service** → connect repo → Runtime: **Python 3** →  
 Build: `pip install -r requirements.txt` →  
-Start: `gunicorn web_app:app --workers 2 --bind 0.0.0.0:$PORT --timeout 120`
+Start: `gunicorn web_app:app --workers 1 --threads 8 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120`
 
 ---
 

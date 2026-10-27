@@ -7,10 +7,13 @@ services:
     name: nextpick-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    # 2 processes x 4 threads: a slow search no longer holds up everyone else's requests
-    startCommand: gunicorn web_app:app --workers 2 --threads 4 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120
+    # One process x 8 threads. The free instance has 0.1 CPU and 512 MB, so a second process
+    # adds no CPU, doubles memory and startup work, and keeps its own copy of every cache.
+    # The app mostly waits on TMDB, Groq and the database, which threads handle well.
+    startCommand: gunicorn web_app:app --workers 1 --threads 8 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120
     healthCheckPath: /api/session
-    plan: free
+    # No `plan` here on purpose: Render keeps whatever instance type the service has, so it is
+    # changed in the dashboard and a Blueprint sync never switches a paid instance back to free.
     envVars:
       - key: TMDB_API_KEY
         sync: false           # fill in Render dashboard — never commit secrets
