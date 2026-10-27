@@ -7,33 +7,68 @@ import { apiRequest } from "../../lib/api";
 import { useSessionGuard } from "../../components/useSessionGuard";
 import { useRouter } from "next/navigation";
 
+// Right after the server wakes up or restarts, these TMDB-backed sections can take a while
+// or fail once, so each one is retried a few times before it gives up.
+async function loadWithRetry(path, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await apiRequest(path, { timeoutMs: 45000 });
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
+    }
+  }
+}
+
+function SectionError({ what, onRetry }) {
+  return (
+    <div className="section-error">
+      <span>Couldn't load {what}. The server may still be starting up.</span>
+      <button type="button" className="section-error-btn" onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const session = useSessionGuard();
   const router = useRouter();
   const [watchedCount, setWatchedCount] = useState(null);
-  const [trending, setTrending] = useState([]);
-  const [ottReleases, setOttReleases] = useState([]);
-  const [ottProviders, setOttProviders] = useState([]);
-  const [todaysPick, setTodaysPick] = useState(undefined); // undefined = loading, null = none
+  // Each section: undefined = loading, "error" = failed after retries, otherwise loaded.
+  const [trending, setTrending] = useState(undefined);
+  const [ott, setOtt] = useState(undefined);   // { releases, providers }
+  const [todaysPick, setTodaysPick] = useState(undefined); // null = no pick today
+
+  function loadTrending() {
+    setTrending(undefined);
+    loadWithRetry("/api/search/trending")
+      .then((payload) => setTrending(payload.trending || []))
+      .catch(() => setTrending("error"));
+  }
+  function loadOtt() {
+    setOtt(undefined);
+    loadWithRetry("/api/dashboard/ott-releases")
+      .then((payload) => setOtt({ releases: payload.releases || [], providers: payload.providers || [] }))
+      .catch(() => setOtt("error"));
+  }
+  function loadTodaysPick() {
+    setTodaysPick(undefined);
+    loadWithRetry("/api/dashboard/today-pick")
+      .then((payload) => setTodaysPick(payload.pick || null))
+      .catch(() => setTodaysPick("error"));
+  }
 
   useEffect(() => {
     if (!session.authenticated) return;
-    apiRequest("/api/history")
+    loadWithRetry("/api/history")
       .then((payload) => setWatchedCount((payload.watched_items || []).length))
-      .catch(() => setWatchedCount(0));
-    apiRequest("/api/search/trending")
-      .then((payload) => setTrending(payload.trending || []))
-      .catch(() => {});
-    apiRequest("/api/dashboard/ott-releases")
-      .then((payload) => {
-        setOttReleases(payload.releases || []);
-        setOttProviders(payload.providers || []);
-      })
-      .catch(() => {});
-    apiRequest("/api/dashboard/today-pick")
-      .then((payload) => setTodaysPick(payload.pick || null))
-      .catch(() => setTodaysPick(null));
+      .catch(() => setWatchedCount(null));
+    loadTrending();
+    loadOtt();
+    loadTodaysPick();
   }, [session.authenticated]);
+
+  const ottReleases = ott && ott !== "error" ? ott.releases : [];
+  const ottProviders = ott && ott !== "error" ? ott.providers : [];
 
   if (session.loading) {
     return <div className="loading-screen">Loading...</div>;
@@ -74,6 +109,8 @@ export default function HomePage() {
       {todaysPick === undefined ? (
         /* Loading skeleton */
         <div className="todays-pick-skeleton" />
+      ) : todaysPick === "error" ? (
+        <SectionError what="Today's Pick" onRetry={loadTodaysPick} />
       ) : todaysPick ? (
         <>
           <section className="section-head">
@@ -170,7 +207,9 @@ export default function HomePage() {
       ) : null}
 
       {/* Trending */}
-      {trending.length > 0 && (
+      {trending === undefined && <div className="poster-row-skeleton" />}
+      {trending === "error" && <SectionError what="trending titles" onRetry={loadTrending} />}
+      {Array.isArray(trending) && trending.length > 0 && (
         <>
           <section className="section-head">
             <span className="section-kicker">Trending Today</span>
@@ -211,6 +250,8 @@ export default function HomePage() {
       )}
 
       {/* Latest OTT Releases */}
+      {ott === undefined && <div className="poster-row-skeleton" />}
+      {ott === "error" && <SectionError what="the latest streaming releases" onRetry={loadOtt} />}
       {ottReleases.length > 0 && (
         <>
           <section className="section-head">

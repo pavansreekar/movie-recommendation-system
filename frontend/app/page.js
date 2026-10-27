@@ -12,6 +12,7 @@ export default function HomePage() {
   const [form, setForm] = useState({ username: "", password: "" });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);   // false | "working" | "waking"
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -24,14 +25,34 @@ export default function HomePage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (busy) return;
     setError("");
     setMessage("");
+    setBusy("working");
+    // The free server sleeps when nobody uses it and takes up to a minute to start, so
+    // wait that long instead of the usual 15 s, and say why once it's clearly slow.
+    const slow = setTimeout(() => setBusy("waking"), 5000);
     try {
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const payload = await apiRequest(path, {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
+      const started = Date.now();
+      let payload;
+      for (;;) {
+        try {
+          payload = await apiRequest(path, {
+            method: "POST",
+            body: JSON.stringify(form),
+            timeoutMs: 90000,
+          });
+          break;
+        } catch (err) {
+          // 502–504 come from the host while the server restarts; it is usually back
+          // within a minute, so keep trying instead of failing straight away.
+          const restarting = err.status >= 502 && err.status <= 504;
+          if (!restarting || Date.now() - started > 75000) throw err;
+          setBusy("waking");
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+        }
+      }
       if (mode === "login") {
         router.replace("/dashboard");
       } else {
@@ -40,6 +61,9 @@ export default function HomePage() {
       }
     } catch (err) {
       setError(err.message);
+    } finally {
+      clearTimeout(slow);
+      setBusy(false);
     }
   }
 
@@ -133,14 +157,23 @@ export default function HomePage() {
             </div>
           </label>
 
-          <button className="auth-submit-btn" type="submit">
-            <span>{mode === "login" ? "Sign in" : "Create account"}</span>
+          <button className="auth-submit-btn" type="submit" disabled={!!busy}>
+            <span>
+              {busy
+                ? (mode === "login" ? "Signing in…" : "Creating account…")
+                : (mode === "login" ? "Sign in" : "Create account")}
+            </span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
           </button>
         </form>
 
+        {busy === "waking" && (
+          <div className="alert alert-info" style={{ marginTop: "1rem" }} aria-live="polite">
+            Waking up the server. After a quiet spell this can take up to a minute.
+          </div>
+        )}
         {message && <div className="alert alert-success" style={{ marginTop: "1rem" }}>{message}</div>}
         {error && <div className="alert alert-warning" style={{ marginTop: "1rem" }}>{error}</div>}
 

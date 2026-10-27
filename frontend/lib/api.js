@@ -83,7 +83,9 @@ async function rawRequest(path, options = {}) {
       const fallback = response.status >= 502 && response.status <= 504
         ? "The server is busy or starting up. Please try again in a few seconds."
         : "Request failed.";
-      throw new Error(payload?.error || payload?.message || fallback);
+      const error = new Error(payload?.error || payload?.message || fallback);
+      error.status = response.status;
+      throw error;
     }
 
     return payload;

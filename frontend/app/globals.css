@@ -1017,6 +1017,7 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
 .empty-state { background: var(--panel); color: var(--muted); }
 .alert-warning { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.22); color: #FCA5A5; }
 .alert-success { background: rgba(34,197,94,0.07); border-color: rgba(34,197,94,0.22); color: #86EFAC; }
+.alert-info    { background: rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.28); color: var(--text); }
 
 /* ─── Chips ───────────────────────────────── */
 .chips { display: flex; gap: 0.45rem; flex-wrap: wrap; margin: 0.85rem 0; }
@@ -1384,6 +1385,39 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
   border: 1px solid var(--line-strong);
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.poster-row-skeleton {
+  min-height: 260px;
+  margin-top: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, var(--panel) 25%, var(--panel-hover) 50%, var(--panel) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+  border: 1px solid var(--line-strong);
+}
+.section-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+  padding: 1rem 1.2rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.section-error-btn {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(201,168,76,0.45);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.section-error-btn:hover { background: rgba(201,168,76,0.1); }
 
 /* Tablets: the copy column spans most of the card, so the desktop fade (transparent
    from ~55%) left the end of each line over a barely-shaded backdrop. */
@@ -1886,6 +1920,7 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
 .auth-submit-btn:hover::before { left: 160%; }
 .auth-submit-btn:hover { box-shadow: 0 0 0 1px rgba(201,168,76,0.52), 0 12px 40px rgba(168,136,60,0.55); transform: translateY(-2px); }
 .auth-submit-btn:active { transform: translateY(0); }
+.auth-submit-btn:disabled { opacity: 0.75; cursor: wait; transform: none; }
 .auth-submit-btn svg { transition: transform 0.22s ease; }
 .auth-submit-btn:hover svg { transform: translateX(4px); }
 
