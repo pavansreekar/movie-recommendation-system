@@ -31,7 +31,9 @@ MAX_CACHE_ENTRIES = 800
 # many calls, and during an outage those waits used to stack up into minutes.
 UNREACHABLE_COOLDOWN_SECONDS = 10
 
-_shared_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="tmdb")
+# Parallel TMDB fetches. Kept small: the free server has a fraction of a CPU, and 16 busy
+# threads parsing responses left no time for logins or Render's 5-second health check.
+_shared_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="tmdb")
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
 CONTENT_TYPE_MOVIE = "movie"

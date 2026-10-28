@@ -3383,6 +3383,11 @@ def _prewarm_caches() -> None:
 
 
 def _start_prewarm() -> None:
+    # Not on the live server: on its fraction of a CPU, warming every cache at boot starved
+    # the first logins and health checks, so Render restarted it and it warmed up again.
+    # There the caches fill as pages are first visited.
+    if IN_PRODUCTION:
+        return
     if os.getenv("TMDB_API_KEY", "").strip():
         threading.Thread(target=_prewarm_caches, daemon=True).start()
 

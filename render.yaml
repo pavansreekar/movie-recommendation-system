@@ -11,7 +11,9 @@ services:
     # adds no CPU, doubles memory and startup work, and keeps its own copy of every cache.
     # The app mostly waits on TMDB, Groq and the database, which threads handle well.
     startCommand: gunicorn web_app:app --workers 1 --threads 8 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120
-    healthCheckPath: /api/session
+    # No healthCheckPath: Render's check gives up after 5 seconds, and on the free instance a
+    # busy moment (e.g. just after boot) is enough to miss it, so Render restarted a working
+    # server and lost its caches. Requests that do hang are bounded by timeouts in the app.
     # No `plan` here on purpose: Render keeps whatever instance type the service has, so it is
     # changed in the dashboard and a Blueprint sync never switches a paid instance back to free.
     envVars:
