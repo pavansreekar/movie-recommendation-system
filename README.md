@@ -1,35 +1,51 @@
 # NextPick 🎬
 
-A personalised movie & TV recommendation app built with Flask + Next.js, powered by the [TMDB API](https://developer.themoviedb.org/) and an optional AI chat assistant (Groq).
+**Stop scrolling. Find your next movie or show.**
 
-> **Live demo** · *replace with your URL after deploying*
+NextPick is a free movie and TV recommendation website. Tell it what you're in the mood for and it suggests titles based on your choices and what you've already watched, shows where each one is streaming in your country, and keeps your watchlist, history and ratings in one place. You can also just ask its chat assistant in plain words.
+
+### [Try it live → yournextpick.vercel.app](https://yournextpick.vercel.app)
+
+| Home | Recommendations |
+|---|---|
+| ![Home page with Today's Pick](docs/screenshots/home.jpg) | ![Recommendations filtered by format, genre, platform and language](docs/screenshots/recommendations.jpg) |
+
+| Title page | Chat assistant |
+|---|---|
+| ![Title page with rating, trailer and where to stream](docs/screenshots/title.jpg) | ![Chat assistant answering a follow-up question](docs/screenshots/chat.jpg) |
 
 ---
 
 ## Features
 
 ### Recommendations
-- **4-step wizard** — filter by format (Movie / TV Show), genre, platform, and language with multi-select
-- **Smart scoring** — ranks titles using genre affinity, language match, watch-history patterns, and TMDB quality scores
-- **"Show me more"** — when you have 16+ results, a button adds 8 extra titles and reveals three exploration sections:
-  - *Open to other platforms?* — same genre & language, any platform
-  - *Open to other genres?* — same platform & language, different genres
-  - *Open to other languages?* — same platform & genre, exploring English / Hindi / Telugu / Tamil
-- **Auto-fallbacks** — when results are scarce the same three sections appear automatically
+- **4-step wizard** — choose format, genre, platform and language. Pick several in each step, or skip any step to leave it open
+- **Personalised ranking** — blends your choices, TMDB ratings and a taste profile built from your watch history
+- **"Don't mind rewatching"** — also brings back favourites from your own history that match your choices
+- **"Since you've watched…"** — picks seeded from your latest watch, sharing its genres or lead actors
+- **"Show me more"** — adds up to 8 extra titles and opens three exploration sections:
+  - *Open to other platforms?* — same genre and language, any platform
+  - *Open to other genres?* — same platform and language, different genres
+  - *Open to other languages?* — same platform and genre, exploring English, Hindi, Telugu and Tamil
+- **Auto-fallbacks** — the same three sections appear by themselves when results are scarce
 - **Watch & replace** — marking a title as watched removes it and promotes the next one from a reserve pool
 
 ### Discovery
-- **Today's Pick** — daily hero spotlight drawn from high-rated Telugu, Hindi, Tamil, and English titles
-- **Trending** — real-time top searches from TMDB
-- **Latest OTT Releases** — recent arrivals across Netflix, Prime, Hotstar, and more
+- **Today's Pick** — one standout title each day, chosen from high-rated English, Hindi, Telugu and Tamil movies and shows
+- **Top searches** — TMDB's daily trending list
+- **Recent streaming arrivals** — the last 60 days on the main services in your region
+- **Live search** — titles, actors and directors appear as you type. Press `/` on any page to jump straight in
 
-### Title pages
-- Full cast, genres, platform availability, TMDB rating
-- Personal rating (1–10) and watched / watchlist toggles
+### Title and people pages
+- Overview, cast, genres, runtime, TMDB rating and the official age rating for your region
+- Where to stream it in your region
+- The official trailer plays right on the page
+- Rate titles from 1 to 10, mark them as watched or save them to your watchlist
 - **Similar titles** — 3-tier discovery:
-  1. Same language + same genres (e.g. Telugu Action/Thriller)
+  1. Same language and genres (e.g. Telugu Action/Thriller)
   2. Same genres, any language
-  3. TMDB similar/recommendations filtered by genre overlap
+  3. TMDB similar titles and recommendations, filtered by genre overlap
+- **Actor and director pages** — a short biography and filmography, most popular first
 
 ### Chat assistant *(requires `GROQ_API_KEY`)*
 - Natural-language queries: *"A Telugu thriller on Netflix"*, *"Movies like Interstellar but not animated"*, *"Hindi movies under 2 hours"*, *"Christopher Nolan films from the 2000s"*
@@ -38,11 +54,14 @@ A personalised movie & TV recommendation app built with Flask + Next.js, powered
 - Answers questions about a title (director, runtime, where to watch in your region) from TMDB data
 - Manages your library: *"add Kantara to my watchlist"*, *"I watched Dune Part Two"*
 - Understands regional film industry names (Tollywood, Bollywood, Kollywood, K-drama …)
-- Runs on Groq (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`); falls back to keyword matching when the key is absent or the model is unreachable (Groq refuses connections from many VPNs — see `TMDB_API_HOST` below for running without one)
+- Runs on Groq (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`). Falls back to keyword matching when the key is absent or the model is unreachable (Groq refuses connections from many VPNs — see `TMDB_API_HOST` below for running without one)
 
-### Account
-- Register / login with password hashing
-- Watch history, ratings, and watchlist all persisted across sessions
+### Your account
+- **27 countries** — platforms, availability and age ratings follow the region you choose
+- **Your library** — watch history, ratings and watchlist, filterable by type, genre and language
+- **Light and dark themes** — your choice is remembered on each device
+- **Secure sign-in** — passwords are hashed with scrypt, and you stay signed in for 30 days through an HTTP-only cookie
+- **Built for slow moments** — branded loading screens and placeholders, automatic retries while the server wakes up, and a retry button if a section fails
 
 ---
 
@@ -50,46 +69,66 @@ A personalised movie & TV recommendation app built with Flask + Next.js, powered
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.12 · Flask 3 |
-| Frontend | Next.js 15 (App Router) · Framer Motion |
-| Database | SQLite (auto-created, zero config) |
+| Frontend | JavaScript · React 19 · Next.js 15 (App Router) · Framer Motion · Tabler Icons · hand-written CSS |
+| Backend | Python · Flask 3 · Gunicorn |
+| Database | PostgreSQL on Neon (live site) · SQLite (local development) |
+| Recommendations | Rule-based scoring + content-based similarity, in plain Python with no ML libraries |
 | Movie data | TMDB v3 REST API |
-| AI chat | Groq (`openai/gpt-oss-120b`, optional) |
-| Production server | Gunicorn |
+| AI chat | Groq (`openai/gpt-oss-120b`, falling back to `openai/gpt-oss-20b`) — optional |
+| Hosting | Vercel (frontend) · Render (backend) · Neon (database) |
+| Uptime | cron-job.org keep-alive ping |
+
+### How it fits together
+
+```mermaid
+flowchart LR
+    B[Browser] --> V["Next.js frontend<br/>Vercel"]
+    V -- "/api/*" --> F["Flask API<br/>Render"]
+    F --> D[("PostgreSQL<br/>Neon")]
+    F --> T["TMDB<br/>movie data"]
+    F --> G["Groq<br/>AI chat"]
+    C["cron-job.org<br/>ping every 5 min"] --> F
+```
 
 ---
 
 ## Project Structure
 
 ```
-movie_bot/
-├── web_app.py              # Flask entry point & all API routes
+movie-recommendation-system/
+├── web_app.py              # Flask app: API routes, recommendation pipeline, chat agent
 ├── src/
-│   ├── tmdb_client.py      # TMDB API client — LRU cache, retry, rate-limit handling
-│   ├── recommender.py      # Scoring & ranking logic
-│   ├── db.py               # SQLite wrapper — history, watchlist, ratings, chat
-│   └── auth.py             # Password hashing (stdlib hashlib)
+│   ├── tmdb_client.py      # TMDB client: caching, retries, rate limits, host fallback
+│   ├── recommender.py      # Hybrid scoring and ranking
+│   ├── db.py               # PostgreSQL / SQLite layer: accounts, history, ratings, watchlist, chat
+│   └── auth.py             # scrypt password hashing
 ├── frontend/
 │   ├── app/
-│   │   ├── dashboard/      # Home — Today's Pick, Trending, OTT releases
-│   │   ├── recommend/      # Wizard + recommendations + "Show me more"
-│   │   ├── title/          # Title detail + similar titles
-│   │   ├── search/         # TMDB search
-│   │   ├── history/        # Watched history
-│   │   └── watchlist/      # Saved watchlist
+│   │   ├── page.js         # Sign in / create account
+│   │   ├── dashboard/      # Home: Today's Pick, top searches, streaming arrivals
+│   │   ├── recommend/      # Wizard, recommendations, "Show me more"
+│   │   ├── title/          # Title page, trailer, similar titles
+│   │   ├── person/         # Actor and director pages
+│   │   ├── search/         # Full search results
+│   │   ├── history/        # Watch history and ratings
+│   │   ├── watchlist/      # Saved titles
+│   │   └── api/            # Backup /api proxy (the rewrite in next.config.mjs answers first)
 │   ├── components/
-│   │   ├── AppShell.js     # Navigation shell
-│   │   ├── ChatBot.js      # Floating AI chat widget
+│   │   ├── AppShell.js     # Navigation, search, account menu
+│   │   ├── ChatBot.js      # Floating chat assistant
+│   │   ├── Loading.js      # Loading screens, placeholders, error states
 │   │   └── useSessionGuard.js
-│   └── lib/
-│       ├── api.js           # apiRequest() with timeout & unified errors
-│       └── watchHistorySync.js
-├── dev_run.py               # Starts both servers concurrently for local dev
-├── Procfile                 # Gunicorn start command (Render / Heroku)
-├── render.yaml              # Render Blueprint for one-click backend deploy
-├── .env.example             # Environment variable template
+│   ├── lib/
+│   │   ├── api.js          # fetch wrapper: timeouts, retries, unified errors
+│   │   └── watchHistorySync.js
+│   └── next.config.mjs     # Forwards /api/* to Flask
+├── docs/screenshots/       # Images used in this README
+├── dev_run.py              # Starts both servers for local development
+├── Procfile                # Gunicorn start command
+├── render.yaml             # Render Blueprint for the backend
+├── .env.example            # Environment variable template
 ├── requirements.txt
-└── data/                   # SQLite DB — auto-created, git-ignored
+└── data/                   # Local SQLite database, created automatically, git-ignored
 ```
 
 ---
@@ -101,8 +140,10 @@ movie_bot/
 | Tool | Minimum version |
 |---|---|
 | Python | 3.11 |
-| Node.js | 18 |
+| Node.js | 18.18 |
 | TMDB API key | free at [developer.themoviedb.org](https://developer.themoviedb.org/docs/getting-started) |
+
+No database setup is needed. Without `DATABASE_URL`, the app creates a SQLite database at `data/app.db` by itself.
 
 ### 1. Clone & install
 
@@ -154,14 +195,14 @@ cd frontend && npm run dev     # frontend only
 
 ## Deployment
 
-The recommended setup is **Render** (Flask backend) + **Vercel** (Next.js frontend). Both have free tiers.
+The live site runs on **Vercel** (Next.js frontend), **Render** (Flask backend) and **Neon** (PostgreSQL), all on free plans.
 
 ### Step 1 — Create a free PostgreSQL database (Neon)
 
-User data is stored in a database. Render's free tier has an **ephemeral filesystem** — without a real database your data disappears on every redeploy. Neon provides a free persistent PostgreSQL database.
+Render's free plan has an **ephemeral filesystem**, so anything saved on its disk is lost on every restart. User data lives in Neon instead, and the app refuses to start on Render without a `DATABASE_URL`.
 
 1. Go to [neon.tech](https://neon.tech) and sign up for free.
-2. Click **New Project** → give it a name (e.g. `nextpick`) → **Create Project**.
+2. Click **New Project** → give it a name (e.g. `nextpick`) → pick the region closest to your Render service → **Create Project**.
 3. On the project dashboard, copy the **Connection string** (looks like `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require`).
 4. Keep this string handy — you'll add it to Render in the next step.
 
@@ -173,7 +214,7 @@ User data is stored in a database. Render's free tier has an **ephemeral filesys
 
 1. Push this repo to GitHub.
 2. Go to [render.com](https://render.com) → **New → Blueprint** → connect your repo.  
-   Render picks up `render.yaml` automatically and creates the `nextpick-api` service.
+   Render picks up `render.yaml` automatically, creates the `nextpick-api` service and generates `FLASK_SECRET_KEY`.
 3. In the service's **Environment** tab add:
 
    | Variable | Value |
@@ -190,6 +231,10 @@ User data is stored in a database. Render's free tier has an **ephemeral filesys
 New → **Web Service** → connect repo → Runtime: **Python 3** →  
 Build: `pip install -r requirements.txt` →  
 Start: `gunicorn web_app:app --workers 1 --threads 8 --worker-class gthread --bind 0.0.0.0:$PORT --timeout 120`
+
+Add the same variables, plus a long random `FLASK_SECRET_KEY`.
+
+Leave **Health Check Path** empty on the free plan. Its 5-second limit is easy to miss on such a small CPU, and each miss makes Render restart a working server.
 
 ---
 
@@ -219,16 +264,28 @@ Trigger a redeploy. Your app is live. ✅
 
 ---
 
+### Step 5 — Keep the backend awake
+
+Render's free plan sleeps after 15 minutes without traffic, and waking up takes about a minute. A free scheduled ping prevents that:
+
+1. At [cron-job.org](https://cron-job.org), create a job for `https://<your-service>.onrender.com/api/session`.
+2. Run it every **5 minutes**.
+3. Add the request header `Accept: application/json`. Without it, a sleeping service answers with a wake-up page of over 200 KB, which is above cron-job.org's 64 KB limit, so the job fails.
+
+One always-on service fits inside Render's 750 free hours a month.
+
+---
+
 ### Database
 
-The app auto-selects the right backend:
+The app picks the right database by itself:
 
-| Environment | Backend | How |
+| Environment | Database | How |
 |---|---|---|
-| Local dev | SQLite (`data/app.db`) | `DATABASE_URL` not set |
-| Production | PostgreSQL | `DATABASE_URL` env var set |
+| Local development | SQLite (`data/app.db`) | `DATABASE_URL` not set |
+| Live site | PostgreSQL on Neon | `DATABASE_URL` set |
 
-The free [Neon](https://neon.tech) PostgreSQL tier is more than enough for personal use and survives Render redeployments.
+Tables and new columns are created automatically on startup, and existing data is left in place. Neon's free plan suspends the database after 5 minutes without use and wakes it on the next query, without touching your data.
 
 ---
 
@@ -237,15 +294,17 @@ The free [Neon](https://neon.tech) PostgreSQL tier is more than enough for perso
 | Variable | Default | Purpose |
 |---|---|---|
 | `TMDB_API_KEY` | *(required)* | TMDB v3 API key |
-| `TMDB_API_HOST` | `api.themoviedb.org` | Which TMDB hostname to try first. The app switches to the other one (`api.tmdb.org`) by itself when a network blocks the first, so no VPN is needed; setting it only skips the first slow attempt after a restart |
+| `DATABASE_URL` | *(empty)* | PostgreSQL connection string. Required on Render; leave empty locally to use SQLite |
+| `FLASK_SECRET_KEY` | `dev-secret-change-me` | Flask session signing. On Render the app won't start without a strong value |
 | `GROQ_API_KEY` | *(optional)* | Enables the chat assistant (Groq) |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Chat model — change it if Groq retires the default |
 | `GROQ_FALLBACK_MODEL` | `openai/gpt-oss-20b` | Used when the main model is rate-limited or unavailable |
-| `FLASK_SECRET_KEY` | `dev-secret-change-me` | Flask session signing — **change in production** |
 | `BACKEND_ORIGIN` | `http://localhost:5001` | Backend URL used by Next.js rewrites |
 | `FRONTEND_ORIGINS` | `http://localhost:3000,...` | Comma-separated CORS allowed origins |
-| `TMDB_TIMEOUT_SECONDS` | `5` | Per-request TMDB timeout |
-| `TMDB_MAX_RETRIES` | `2` | TMDB retry count |
+| `TMDB_API_HOST` | `api.themoviedb.org` | Which TMDB hostname to try first. The app switches to the other one (`api.tmdb.org`) by itself when a network blocks the first, so no VPN is needed; setting it only skips the first slow attempt after a restart |
+| `TMDB_TIMEOUT_SECONDS` | `5` | Per-request TMDB timeout (`render.yaml` sets 8) |
+| `TMDB_MAX_RETRIES` | `2` | TMDB retry count (`render.yaml` sets 3) |
+| `TMDB_RETRY_BACKOFF_SECONDS` | `0.75` | Wait between TMDB retries |
 
 Generate a strong secret key:
 
@@ -260,20 +319,25 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### Request flow
 
 ```
-Browser → Next.js (/api/…) → [next.config.mjs rewrite] → Flask (port 5001)
+Browser → Next.js (/api/…) → [next.config.mjs rewrite] → Flask
 ```
 
-All `/api/*` paths are transparently proxied to Flask via Next.js rewrites. Cookies pass through because `fetch` always sets `credentials: "include"`.
+All `/api/*` paths are forwarded to Flask by a Next.js rewrite. Cookies pass through because `fetch` always sets `credentials: "include"`.
 
 ### Scoring weights (per title)
+
+NextPick uses a hybrid recommender. Rules score how well a title fits your choices, and content-based similarity scores how well it fits your taste.
 
 | Signal | Weight |
 |---|---|
 | Genre match (per matched genre) | +4.0 |
 | Platform match | +3.0 |
 | Language match | +2.5 |
-| Watch-history genre affinity (capped at 5 prior watches × 0.8) | 0 – 4.0 |
-| TMDB quality prior (`rating × 0.15`) | variable |
+| Watch-history genre affinity (+1.0 per match, capped) | 0 – 8.0 |
+| Taste similarity to your watch-history profile | 0 – 4.5 |
+| TMDB quality (`rating × 0.15`) | 0 – 1.5 |
+
+**Taste similarity:** each title becomes a vector of its genres, language, rating and release year. Your watch history is averaged into a profile vector, and each title scores by its cosine similarity to that profile. Both history signals are zero for a new account, so they only sharpen results as you watch more.
 
 ### Fallback tiers
 
@@ -297,12 +361,12 @@ Each tier excludes already-watched titles and titles from prior tiers. Marking a
 
 ```
 Message received
-  → fast greeting check        (no API calls — DB only)
-  → TMDB metadata fetch        (cached in Flask session)
-  → keyword extraction         (regex, no API)
-  → Groq agent                 (intent / filters / reference title)
-  → TMDB discover or similar   (filtered catalog)
-  → MovieRecommender           (scored & ranked)
+  → small-talk check            (answered straight away, no network calls)
+  → region's genres & platforms (cached)
+  → keyword extraction          (regex, no API)
+  → Groq model                  (intent / filters / reference title; keywords are the fallback)
+  → TMDB discover or lookup     (filtered catalog)
+  → MovieRecommender            (scored & ranked)
   → JSON response
 ```
 
@@ -312,17 +376,27 @@ Message received
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/register` | Create account |
-| `POST` | `/api/login` | Login |
-| `GET` | `/api/session` | Auth state |
-| `GET` | `/api/dashboard` | Home data (trending, OTT, today's pick) |
+| `GET` | `/api/session` | Auth state and current user |
+| `POST` | `/api/auth/register` | Create account |
+| `POST` | `/api/auth/login` | Sign in |
+| `POST` | `/api/auth/logout` | Sign out |
+| `POST` | `/api/settings/region` | Change region |
+| `GET` | `/api/dashboard` | Wizard options and saved recommendations |
 | `POST` | `/api/dashboard/recommend` | Filtered recommendations |
-| `GET` | `/api/search?q=` | TMDB search |
+| `GET` | `/api/dashboard/today-pick` | Today's Pick |
+| `GET` | `/api/dashboard/ott-releases` | Recent streaming arrivals |
+| `GET` | `/api/search/trending` | Top searches |
+| `GET` | `/api/search/live?query=` | Live search as you type |
+| `GET` | `/api/search/suggest?query=` | Search suggestions |
+| `POST` | `/api/search/results` | Full search results |
 | `GET` | `/api/title/<type>/<id>` | Title detail |
 | `GET` | `/api/title/<type>/<id>/similar` | Similar titles |
 | `POST` | `/api/title/<type>/<id>/watch` | Toggle watched |
 | `POST` | `/api/title/<type>/<id>/watchlist` | Toggle watchlist |
-| `POST` | `/api/title/<type>/<id>/rate` | Set rating (1–10) |
+| `POST` `DELETE` | `/api/title/<type>/<id>/rating` | Set or remove a rating (1–10) |
+| `GET` | `/api/person/<id>` | Actor or director page |
+| `GET` | `/api/history` | Watch history |
+| `GET` | `/api/watchlist` | Watchlist |
 | `POST` | `/api/chat` | Chat message → AI reply + recs |
 | `GET` | `/api/chat/history` | Conversation history |
 | `POST` | `/api/chat/clear` | Clear conversation |
@@ -334,14 +408,20 @@ Message received
 Pull requests are welcome. Open an issue first for larger changes.
 
 ```bash
-# Backend — auto-reload on file changes
-FLASK_DEBUG=1 python web_app.py
+# Backend — auto-reloads on file changes
+python web_app.py
 
 # Frontend — Next.js hot reload
 cd frontend && npm run dev
 ```
 
-Delete `data/app.db` at any time to reset all user data.
+Delete `data/app.db` at any time to reset all local user data.
+
+---
+
+## Credits
+
+Movie and TV data and images come from [TMDB](https://www.themoviedb.org/). This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ---
 
