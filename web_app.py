@@ -238,6 +238,34 @@ def add_cors_headers(response):
     return response
 
 
+# ── Self-recovery ─────────────────────────────────────────────────────────────
+# Gunicorn replaces a worker that stops responding, but not one whose request threads are
+# all stuck waiting on something that never returns: then every request, sign-in
+# included, queues forever. No real request runs this long, so one that has means the
+# worker is stuck. It exits, and gunicorn starts a fresh one within seconds.
+STUCK_REQUEST_SECONDS = 150
+_requests_started: dict[int, float] = {}   # request thread → when its current request began
+
+
+@app.before_request
+def _note_request_start():
+    _requests_started[threading.get_ident()] = time.monotonic()
+
+
+@app.teardown_request
+def _note_request_end(_error=None):
+    _requests_started.pop(threading.get_ident(), None)
+
+
+def _watch_for_stuck_requests() -> None:
+    while True:
+        time.sleep(10)
+        oldest = min(_requests_started.copy().values(), default=None)
+        if oldest is not None and time.monotonic() - oldest > STUCK_REQUEST_SECONDS:
+            print(f"A request has run for over {STUCK_REQUEST_SECONDS}s; restarting this worker.", flush=True)
+            os._exit(1)
+
+
 def fetch_dashboard_metadata(tmdb: TMDBClient, region: str | None = None) -> tuple[dict[str, dict[str, int]], dict[str, list[Any]], dict[str, str], str | None]:
     """Genres, providers (for the region) and languages. TMDBClient caches these for 24h,
     so repeat calls are memory hits."""
@@ -3399,3 +3427,5 @@ if __name__ == "__main__":
     app.run(debug=True, port=5001, threaded=True)
 else:
     _start_prewarm()
+    if IN_PRODUCTION:   # under gunicorn, which starts a new worker when this one exits
+        threading.Thread(target=_watch_for_stuck_requests, daemon=True).start()

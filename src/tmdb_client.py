@@ -33,7 +33,10 @@ UNREACHABLE_COOLDOWN_SECONDS = 10
 
 # Parallel TMDB fetches. Kept small: the free server has a fraction of a CPU, and 16 busy
 # threads parsing responses left no time for logins or Render's 5-second health check.
-_shared_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="tmdb")
+_on_pool = threading.local()
+_shared_pool = ThreadPoolExecutor(
+    max_workers=6, thread_name_prefix="tmdb", initializer=lambda: setattr(_on_pool, "active", True)
+)
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
 CONTENT_TYPE_MOVIE = "movie"
@@ -272,6 +275,12 @@ class TMDBClient:
                 return func(item)
             except Exception:
                 return None
+        if getattr(_on_pool, "active", False):
+            # Already on a pool thread (say, one of the "similar titles" searches run side
+            # by side): do the work here. Queuing it on the same pool and waiting could leave
+            # every worker waiting on work queued behind it, and then the whole server stops
+            # answering.
+            return [_safe(item) for item in items]
         return list(_shared_pool.map(_safe, items))
 
     @classmethod
